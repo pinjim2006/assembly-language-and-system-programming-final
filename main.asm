@@ -3,7 +3,7 @@ INCLUDE Irvine32.inc
 main EQU start@0
 
 ; 外框尺寸
-outerBoxWidth = 82
+outerBoxWidth = 84
 outerBoxHeight = 26
 
 ; 方塊尺寸
@@ -25,87 +25,57 @@ outputHandle DWORD 0
 bytesWritten DWORD 0
 count DWORD 0
 
+; 外框與方塊初始位置
 outerBoxPosInit COORD <5,3>
-outerBoxPos COORD <5,3>
-blockPosInit COORD <6, 4>
-blockPos COORD <6, 4>
+outerBoxPos COORD <?, ?>
+blockPosInit COORD <7, 4>
+blockPos COORD <?, ?>
 
+; 用來設定屬性
 cellsWritten DWORD ?
 outerAttributes WORD outerBoxWidth DUP(0Ah)  ; 只需要一行的屬性
 
 .code
 
+;------------------------------------------------
+; 畫外框
+;------------------------------------------------
 outerBox PROC USES eax ecx
-
-    ; Get the console ouput handle
     mov ax, outerBoxPosInit.X
     mov outerBoxPos.X, ax
     mov ax, outerBoxPosInit.Y
     mov outerBoxPos.Y, ax
 
     INVOKE GetStdHandle, STD_OUTPUT_HANDLE
-    mov outputHandle, eax	; save console handle
+    mov outputHandle, eax
     call Clrscr
-    
-    ; draw top of the box
-    INVOKE WriteConsoleOutputAttribute,
-        outputHandle, 
-        ADDR outerAttributes,
-        outerBoxWidth,          ; 只設定一行的屬性
-        outerBoxPos,
-        ADDR cellsWritten
 
-    INVOKE WriteConsoleOutputCharacter,
-        outputHandle,	; console output handle
-        ADDR outerBoxTop,	; pointer to the top box line
-        outerBoxWidth,	; size of box line
-        outerBoxPos,	; coordinates of first char
-        ADDR count	; output count
+    ; 畫頂
+    INVOKE WriteConsoleOutputAttribute, outputHandle, ADDR outerAttributes, outerBoxWidth, outerBoxPos, ADDR cellsWritten
+    INVOKE WriteConsoleOutputCharacter, outputHandle, ADDR outerBoxTop, outerBoxWidth, outerBoxPos, ADDR count
 
-    inc outerBoxPos.Y	; next line
+    inc outerBoxPos.Y
 
-    ; draw body of the box
-    mov ecx, (outerBoxHeight-2)	; number of lines in body
-L1:	push ecx	; save counter
-
-    ; 每行都設定屬性
-    INVOKE WriteConsoleOutputAttribute,
-        outputHandle, 
-        ADDR outerAttributes,
-        outerBoxWidth,
-        outerBoxPos,
-        ADDR cellsWritten
-
-    INVOKE WriteConsoleOutputCharacter,
-        outputHandle,	; console output handle
-        ADDR outerBoxBody,	; pointer to the box body
-        outerBoxWidth,	; size of box line
-        outerBoxPos,	; coordinates of first char
-        ADDR count; output count
-
-    inc outerBoxPos.Y	; next line
-    pop ecx	; restore counter
+    ; 畫中間
+    mov ecx, outerBoxHeight-2
+L1:
+    push ecx
+    INVOKE WriteConsoleOutputAttribute, outputHandle, ADDR outerAttributes, outerBoxWidth, outerBoxPos, ADDR cellsWritten
+    INVOKE WriteConsoleOutputCharacter, outputHandle, ADDR outerBoxBody, outerBoxWidth, outerBoxPos, ADDR count
+    inc outerBoxPos.Y
+    pop ecx
     loop L1
 
-    ; draw bottom of the box
-    INVOKE WriteConsoleOutputAttribute,
-        outputHandle, 
-        ADDR outerAttributes,
-        outerBoxWidth,
-        outerBoxPos,
-        ADDR cellsWritten
-
-    INVOKE WriteConsoleOutputCharacter,
-        outputHandle,	; console output handle
-        ADDR outerBoxBottom,	; pointer to the bottom of the box
-        outerBoxWidth,	; size of box line
-        outerBoxPos,	; coordinates of first char
-        ADDR count	; output count
+    ; 畫底
+    INVOKE WriteConsoleOutputAttribute, outputHandle, ADDR outerAttributes, outerBoxWidth, outerBoxPos, ADDR cellsWritten
+    INVOKE WriteConsoleOutputCharacter, outputHandle, ADDR outerBoxBottom, outerBoxWidth, outerBoxPos, ADDR count
     ret
 outerBox ENDP
 
-initBlock PROC USES eax ecx
-    ; 將方5*3的方塊左上角放在6*4的位置
+;------------------------------------------------
+; 初始化方塊位置
+;------------------------------------------------
+initBlock PROC USES eax
     mov ax, blockPosInit.X
     mov blockPos.X, ax
     mov ax, blockPosInit.Y
@@ -113,16 +83,104 @@ initBlock PROC USES eax ecx
     ret
 initBlock ENDP
 
-moveBlock PROC USES eax ecx edx
+;------------------------------------------------
+; 畫方塊
+;------------------------------------------------
+drawBlock PROC USES eax
+    mov ax, blockPos.X
+    mov dx, blockPos.Y
+    mov outerBoxPos.X, ax
+    mov outerBoxPos.Y, dx
 
+    ; 畫上
+    INVOKE WriteConsoleOutputCharacter, outputHandle, ADDR BlockTop, blockWidth, outerBoxPos, ADDR count
+    inc outerBoxPos.Y
+
+    ; 畫中
+    mov cx, blockHeight-2
+L2:
+    push cx
+    INVOKE WriteConsoleOutputCharacter, outputHandle, ADDR BlockBody, blockWidth, outerBoxPos, ADDR count
+    inc outerBoxPos.Y
+    pop cx
+    loop L2
+
+    ; 畫下
+    INVOKE WriteConsoleOutputCharacter, outputHandle, ADDR BlockBottom, blockWidth, outerBoxPos, ADDR count
+    ret
+drawBlock ENDP
+
+;------------------------------------------------
+; 移動方塊
+;------------------------------------------------
+moveBlock PROC USES eax ebx edx
+    mov ax, blockPos.X
+    mov dx, blockPos.Y
+START_MOVE:
+    call Clrscr
+    call outerBox
+    call drawBlock
+
+    call ReadChar
+
+    ; 方向鍵檢測
+    ; UP
+    .IF ax == 4800h
+        mov bx, blockPos.Y-3
+        cmp bx, outerBoxPosInit.Y
+        jle SKIP_UP
+        sub blockPos.Y, 3
+    SKIP_UP:
+    .ENDIF
+
+    ; DOWN
+    .IF ax == 5000h
+        mov bx, blockPos.Y+3
+        cmp bx, outerBoxPosInit.Y + outerBoxHeight - blockHeight
+        jge SKIP_DOWN
+        add blockPos.Y, 3
+    SKIP_DOWN:
+    .ENDIF
+
+    ; LEFT
+    .IF ax == 4B00h
+        mov bx, blockPos.X-5
+        cmp bx, outerBoxPosInit.X
+        jle SKIP_LEFT
+        sub blockPos.X, 5
+    SKIP_LEFT:
+    .ENDIF
+
+    ; RIGHT
+    .IF ax == 4D00h
+        mov bx, blockPos.X+5
+        cmp bx, outerBoxPosInit.X + outerBoxWidth - blockWidth
+        jge SKIP_RIGHT
+        add blockPos.X, 5
+    SKIP_RIGHT:
+    .ENDIF
+
+    ; ESC
+    .IF ax == 011Bh
+        jmp END_MOVE
+    .ENDIF
+
+    jmp START_MOVE
+END_MOVE:
     ret
 moveBlock ENDP
 
+;------------------------------------------------
+; Main
+;------------------------------------------------
 main PROC
-    call outerBox
+    INVOKE GetStdHandle, STD_OUTPUT_HANDLE
+    mov outputHandle, eax
+
+    call initBlock
     call moveBlock
-    call WaitMsg
     call Clrscr
     exit
 main ENDP
+
 END main
