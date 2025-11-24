@@ -1,0 +1,13 @@
+.github
+
+*.dll
+*.lib
+*.inc
+*.obj
+*.exe
+windbg.*
+*.pdb
+*.ilk
+*.log
+*.ink
+ml.*
