@@ -10,6 +10,12 @@ outerBoxHeight = 26
 blockWidth  = 5
 blockHeight = 3
 
+; 方塊邊界
+BlockTopBoundary    = blockPosInit.Y
+BlockBottomBoundary = blockPosInit.Y + (blockHeight * 7)
+blockLeftBoundary  = blockPosInit.X
+blockRightBoundary = blockPosInit.X + (blockWidth * 15)
+
 .data
 ; 外框字元
 outerBoxTop    BYTE 0DAh, (outerBoxWidth - 2) DUP(0C4h), 0BFh
@@ -114,8 +120,6 @@ drawBlock ENDP
 ; 移動方塊
 ;------------------------------------------------
 moveBlock PROC USES eax ebx edx
-    mov ax, blockPos.X
-    mov dx, blockPos.Y
 START_MOVE:
     call Clrscr
     call outerBox
@@ -126,47 +130,50 @@ START_MOVE:
     ; 方向鍵檢測
     ; UP
     .IF ax == 4800h
-        mov bx, blockPos.Y-3
-        cmp bx, outerBoxPosInit.Y
-        jle SKIP_UP
-        sub blockPos.Y, 3
-    SKIP_UP:
+        sub blockPos.Y, blockHeight
+        mov bx, blockPosInit.Y
+        cmp blockPos.Y, bx
+        jge END_MOVE
+        add blockPos.Y, blockHeight
     .ENDIF
 
     ; DOWN
     .IF ax == 5000h
-        mov bx, blockPos.Y+3
-        cmp bx, outerBoxPosInit.Y + outerBoxHeight - blockHeight
-        jge SKIP_DOWN
-        add blockPos.Y, 3
-    SKIP_DOWN:
+        add blockPos.Y, blockHeight
+        mov bx, (blockHeight * 7)
+        add bx, blockPosInit.Y
+        cmp blockPos.Y, bx
+        jbe END_MOVE
+        sub blockPos.Y, blockHeight
     .ENDIF
 
     ; LEFT
     .IF ax == 4B00h
-        mov bx, blockPos.X-5
-        cmp bx, outerBoxPosInit.X
-        jle SKIP_LEFT
-        sub blockPos.X, 5
-    SKIP_LEFT:
+        sub blockPos.X, blockWidth
+        mov bx, blockPosInit.X
+        cmp blockPos.X, bx
+        jae END_MOVE
+        add blockPos.X, blockWidth
     .ENDIF
 
     ; RIGHT
     .IF ax == 4D00h
-        mov bx, blockPos.X+5
-        cmp bx, outerBoxPosInit.X + outerBoxWidth - blockWidth
-        jge SKIP_RIGHT
-        add blockPos.X, 5
-    SKIP_RIGHT:
+        add blockPos.X, blockWidth
+        mov bx, (blockWidth * 15)
+        add bx, blockPosInit.X
+        cmp blockPos.X, bx
+        jbe END_MOVE
+        sub blockPos.X, blockWidth
     .ENDIF
 
     ; ESC
     .IF ax == 011Bh
-        jmp END_MOVE
+        jmp EXIT_MOVE
     .ENDIF
 
-    jmp START_MOVE
 END_MOVE:
+    jmp START_MOVE
+EXIT_MOVE:
     ret
 moveBlock ENDP
 
