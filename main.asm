@@ -39,7 +39,10 @@ blockPos COORD <?, ?>
 
 ; 用來設定屬性
 cellsWritten DWORD ?
-outerAttributes WORD outerBoxWidth DUP(0Ah)  ; 只需要一行的屬性
+outerAttributes WORD outerBoxWidth DUP(0F0h)  ; 白底黑字
+blockAttributes WORD blockWidth DUP(0F0h)     ; 白底黑字
+
+hConsole HANDLE ?
 
 .code
 
@@ -99,6 +102,7 @@ drawBlock PROC USES eax
     mov outerBoxPos.Y, dx
 
     ; 畫上
+    INVOKE WriteConsoleOutputAttribute, outputHandle, ADDR blockAttributes, blockWidth, outerBoxPos, ADDR cellsWritten
     INVOKE WriteConsoleOutputCharacter, outputHandle, ADDR BlockTop, blockWidth, outerBoxPos, ADDR count
     inc outerBoxPos.Y
 
@@ -106,12 +110,14 @@ drawBlock PROC USES eax
     mov cx, blockHeight-2
 L2:
     push cx
+    INVOKE WriteConsoleOutputAttribute, outputHandle, ADDR blockAttributes, blockWidth, outerBoxPos, ADDR cellsWritten
     INVOKE WriteConsoleOutputCharacter, outputHandle, ADDR BlockBody, blockWidth, outerBoxPos, ADDR count
     inc outerBoxPos.Y
     pop cx
     loop L2
 
     ; 畫下
+    INVOKE WriteConsoleOutputAttribute, outputHandle, ADDR blockAttributes, blockWidth, outerBoxPos, ADDR cellsWritten
     INVOKE WriteConsoleOutputCharacter, outputHandle, ADDR BlockBottom, blockWidth, outerBoxPos, ADDR count
     ret
 drawBlock ENDP
@@ -181,6 +187,9 @@ moveBlock ENDP
 ; Main
 ;------------------------------------------------
 main PROC
+    INVOKE GetStdHandle, STD_OUTPUT_HANDLE
+    mov hConsole, eax
+    INVOKE SetConsoleTextAttribute, hConsole, 0f0h ; 白底黑字
     INVOKE GetStdHandle, STD_OUTPUT_HANDLE
     mov outputHandle, eax
 
