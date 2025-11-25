@@ -154,6 +154,8 @@ START_MOVE:
     .ELSEIF ax == 1265h  ; e鍵
         mov bl, 5
         call addTowerWithType
+    .ELSEIF ax == 2d78h  ; x鍵 - 刪除塔
+        call deleteTower
     .ENDIF
     
         ; 方向鍵檢測
@@ -242,6 +244,159 @@ addTowerWithType PROC USES eax ecx esi
 NO_ADD_TYPE:
     ret
 addTowerWithType ENDP
+
+;------------------------------------------------
+; 刪除塔功能
+;------------------------------------------------
+deleteTower PROC USES eax ebx ecx esi
+    ; 先檢查是否有塔
+    cmp towerCount, 0
+    je NO_TOWER_FOUND
+    
+    mov ecx, 0          ; 索引計數器
+    
+CHECK_TOWER_LOOP:
+    cmp ecx, towerCount
+    jge NO_TOWER_FOUND
+    
+    ; 檢查當前塔是否與block位置重疊
+    call isTowerAtPositionSimple
+    cmp eax, 1          ; 如果找到重疊的塔
+    je DELETE_FOUND_TOWER
+    
+    inc ecx
+    jmp CHECK_TOWER_LOOP
+    
+DELETE_FOUND_TOWER:
+    ; 刪除索引為ecx的塔
+    call removeTowerAtIndexSimple
+    jmp DELETE_DONE
+    
+NO_TOWER_FOUND:
+    ; 沒有找到塔，什麼都不做
+    
+DELETE_DONE:
+    ret
+deleteTower ENDP
+
+;------------------------------------------------
+; 檢查指定索引的塔是否與當前block位置重疊 (簡化版)
+;------------------------------------------------
+isTowerAtPositionSimple PROC USES ebx esi
+    ; 使用ecx作為塔索引
+    
+    ; 獲取塔的X座標
+    mov esi, OFFSET towersPosX
+    mov ebx, ecx
+    imul ebx, 2         ; WORD大小
+    add esi, ebx
+    mov bx, WORD PTR [esi]
+    
+    ; 比較X座標
+    cmp bx, blockPos.X
+    jne NOT_MATCH_SIMPLE
+    
+    ; 獲取塔的Y座標
+    mov esi, OFFSET towersPosY
+    mov ebx, ecx
+    imul ebx, 2         ; WORD大小
+    add esi, ebx
+    mov bx, WORD PTR [esi]
+    
+    ; 比較Y座標
+    cmp bx, blockPos.Y
+    jne NOT_MATCH_SIMPLE
+    
+    ; 位置匹配
+    mov eax, 1
+    ret
+    
+NOT_MATCH_SIMPLE:
+    mov eax, 0
+    ret
+isTowerAtPositionSimple ENDP
+
+;------------------------------------------------
+; 移除指定索引的塔 (簡化版)
+;------------------------------------------------
+removeTowerAtIndexSimple PROC USES eax ebx edx esi edi
+    ; 使用ecx作為要刪除的塔索引
+    mov eax, ecx        ; 獲取要刪除的索引（使用ecx）
+    mov ebx, towerCount
+    dec ebx             ; 最後一個塔的索引
+    
+    ; 如果要刪除的不是最後一個塔，需要移動數據
+    cmp eax, ebx
+    jge JUST_DECREASE_COUNT_SIMPLE
+    
+    ; 保存要刪除的索引
+    mov edx, eax
+    
+    ; 移動X座標數組
+    mov esi, OFFSET towersPosX
+    mov eax, edx
+    imul eax, 2         ; 起始位置
+    add esi, eax
+    mov edi, esi
+    add esi, 2          ; 下一個位置
+    mov eax, ebx        ; 最後索引
+    sub eax, edx        ; 需要移動的元素數量
+    
+MOVE_X_LOOP_SIMPLE:
+    cmp eax, 0
+    je MOVE_Y_ARRAY_SIMPLE
+    mov cx, WORD PTR [esi]
+    mov WORD PTR [edi], cx
+    add esi, 2
+    add edi, 2
+    dec eax
+    jmp MOVE_X_LOOP_SIMPLE
+    
+MOVE_Y_ARRAY_SIMPLE:
+    ; 移動Y座標數組
+    mov esi, OFFSET towersPosY
+    mov eax, edx        ; 恢復索引
+    imul eax, 2         ; 起始位置
+    add esi, eax
+    mov edi, esi
+    add esi, 2          ; 下一個位置
+    mov eax, ebx        ; 最後索引
+    sub eax, edx        ; 需要移動的元素數量
+    
+MOVE_Y_LOOP_SIMPLE:
+    cmp eax, 0
+    je MOVE_TYPE_ARRAY_SIMPLE
+    mov cx, WORD PTR [esi]
+    mov WORD PTR [edi], cx
+    add esi, 2
+    add edi, 2
+    dec eax
+    jmp MOVE_Y_LOOP_SIMPLE
+    
+MOVE_TYPE_ARRAY_SIMPLE:
+    ; 移動類型數組
+    mov esi, OFFSET towersType
+    mov eax, edx        ; 恢復索引
+    add esi, eax        ; 起始位置
+    mov edi, esi
+    inc esi             ; 下一個位置
+    mov eax, ebx        ; 最後索引
+    sub eax, edx        ; 需要移動的元素數量
+    
+MOVE_TYPE_LOOP_SIMPLE:
+    cmp eax, 0
+    je JUST_DECREASE_COUNT_SIMPLE
+    mov cl, BYTE PTR [esi]
+    mov BYTE PTR [edi], cl
+    inc esi
+    inc edi
+    dec eax
+    jmp MOVE_TYPE_LOOP_SIMPLE
+    
+JUST_DECREASE_COUNT_SIMPLE:
+    dec towerCount
+    ret
+removeTowerAtIndexSimple ENDP
 
 ;------------------------------------------------
 ; 畫單個Tower
