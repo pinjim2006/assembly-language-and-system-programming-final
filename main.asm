@@ -212,6 +212,12 @@ addTower ENDP
 ;------------------------------------------------
 addTowerWithType PROC USES eax ecx esi
     ; bl 包含塔的類型 (1-5)
+    
+    ; 先檢查當前位置是否已有塔
+    call checkTowerAtCurrentPosition
+    cmp eax, 1
+    je NO_ADD_TYPE      ; 如果已有塔，不放置
+    
     mov eax, towerCount
     cmp eax, towerMax
     jge NO_ADD_TYPE
@@ -244,6 +250,51 @@ addTowerWithType PROC USES eax ecx esi
 NO_ADD_TYPE:
     ret
 addTowerWithType ENDP
+
+;------------------------------------------------
+; 檢查當前位置是否已有塔
+;------------------------------------------------
+checkTowerAtCurrentPosition PROC USES ebx ecx esi
+    mov ecx, 0          ; 索引計數器
+    
+CHECK_POSITION_LOOP:
+    cmp ecx, towerCount
+    jge NO_TOWER_AT_POSITION
+    
+    ; 獲取塔的X座標
+    mov esi, OFFSET towersPosX
+    mov ebx, ecx
+    imul ebx, 2         ; WORD大小
+    add esi, ebx
+    mov bx, WORD PTR [esi]
+    
+    ; 比較X座標
+    cmp bx, blockPos.X
+    jne NEXT_TOWER_CHECK
+    
+    ; 獲取塔的Y座標
+    mov esi, OFFSET towersPosY
+    mov ebx, ecx
+    imul ebx, 2         ; WORD大小
+    add esi, ebx
+    mov bx, WORD PTR [esi]
+    
+    ; 比較Y座標
+    cmp bx, blockPos.Y
+    je TOWER_FOUND_AT_POSITION
+    
+NEXT_TOWER_CHECK:
+    inc ecx
+    jmp CHECK_POSITION_LOOP
+    
+TOWER_FOUND_AT_POSITION:
+    mov eax, 1          ; 找到塔
+    ret
+    
+NO_TOWER_AT_POSITION:
+    mov eax, 0          ; 沒有找到塔
+    ret
+checkTowerAtCurrentPosition ENDP
 
 ;------------------------------------------------
 ; 刪除塔功能
