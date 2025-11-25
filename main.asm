@@ -482,17 +482,17 @@ drawTower PROC USES eax ebx ecx edi esi
 
     ; 根據類型畫不同樣式的塔
     .IF bl == 1      ; a鍵
-        call drawBasicTower
+        call drawATower
     .ELSEIF bl == 2  ; b鍵
-        call drawDefenseTower
+        call drawBTower
     .ELSEIF bl == 3  ; c鍵
-        call drawAttackTower
+        call drawCTower
     .ELSEIF bl == 4  ; d鍵
-        call drawMagicTower
+        call drawDTower
     .ELSEIF bl == 5  ; e鍵
-        call drawSpecialTower
+        call drawETower
     .ELSE            ; 預設
-        call drawBasicTower
+        call drawATower
     .ENDIF
     
     pop DWORD PTR outerBoxPos
@@ -502,7 +502,7 @@ drawTower ENDP
 ;------------------------------------------------
 ; 繪製a鍵
 ;------------------------------------------------
-drawBasicTower PROC
+drawATower PROC
     ; 頂：█████
     INVOKE WriteConsoleOutputAttribute, outputHandle, ADDR blockAttributes, blockWidth, outerBoxPos, ADDR cellsWritten
     mov tempBuffer, 0DBh    ; █
@@ -532,12 +532,12 @@ drawBasicTower PROC
     mov tempBuffer+4, 0DBh  ; █
     INVOKE WriteConsoleOutputCharacter, outputHandle, ADDR tempBuffer, blockWidth, outerBoxPos, ADDR count
     ret
-drawBasicTower ENDP
+drawATower ENDP
 
 ;------------------------------------------------
 ; 繪製b鍵
 ;------------------------------------------------
-drawDefenseTower PROC
+drawBTower PROC
     ; 頂：▲▲▲▲▲
     INVOKE WriteConsoleOutputAttribute, outputHandle, ADDR blockAttributes, blockWidth, outerBoxPos, ADDR cellsWritten
     mov tempBuffer, 1Eh     ; ▲
@@ -567,12 +567,12 @@ drawDefenseTower PROC
     mov tempBuffer+4, 0CDh  ; ═
     INVOKE WriteConsoleOutputCharacter, outputHandle, ADDR tempBuffer, blockWidth, outerBoxPos, ADDR count
     ret
-drawDefenseTower ENDP
+drawBTower ENDP
 
 ;------------------------------------------------
 ; 繪製c鍵
 ;------------------------------------------------
-drawAttackTower PROC
+drawCTower PROC
     ; 頂： ╔═╗ 
     INVOKE WriteConsoleOutputAttribute, outputHandle, ADDR blockAttributes, blockWidth, outerBoxPos, ADDR cellsWritten
     mov tempBuffer, ' '
@@ -602,12 +602,12 @@ drawAttackTower PROC
     mov tempBuffer+4, ' '
     INVOKE WriteConsoleOutputCharacter, outputHandle, ADDR tempBuffer, blockWidth, outerBoxPos, ADDR count
     ret
-drawAttackTower ENDP
+drawCTower ENDP
 
 ;------------------------------------------------
 ; 繪製d鍵
 ;------------------------------------------------
-drawMagicTower PROC
+drawDTower PROC
     ; 頂：※※※※※
     INVOKE WriteConsoleOutputAttribute, outputHandle, ADDR blockAttributes, blockWidth, outerBoxPos, ADDR cellsWritten
     mov tempBuffer, 15h     ; ※
@@ -637,12 +637,12 @@ drawMagicTower PROC
     mov tempBuffer+4, 0E9h  ; ∩
     INVOKE WriteConsoleOutputCharacter, outputHandle, ADDR tempBuffer, blockWidth, outerBoxPos, ADDR count
     ret
-drawMagicTower ENDP
+drawDTower ENDP
 
 ;------------------------------------------------
 ; 繪製e鍵
 ;------------------------------------------------
-drawSpecialTower PROC
+drawETower PROC
     ; 頂：♫♪♫♪♫
     INVOKE WriteConsoleOutputAttribute, outputHandle, ADDR blockAttributes, blockWidth, outerBoxPos, ADDR cellsWritten
     mov tempBuffer, 0Eh     ; ♫
@@ -672,7 +672,7 @@ drawSpecialTower PROC
     mov tempBuffer+4, 1Fh   ; ▼
     INVOKE WriteConsoleOutputCharacter, outputHandle, ADDR tempBuffer, blockWidth, outerBoxPos, ADDR count
     ret
-drawSpecialTower ENDP
+drawETower ENDP
 
 ;------------------------------------------------
 ; 畫所有Tower
