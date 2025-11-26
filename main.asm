@@ -47,6 +47,9 @@ towersType BYTE towerMax DUP(?)  ; 類型
 towerCount DWORD 0
 tempBuffer BYTE blockWidth DUP(?)
 useCursorColor DWORD 0  ; 0=使用正常顏色, 1=使用游標顏色
+blinkCounter DWORD 0    ; 閃爍計數器
+blinkState DWORD 0      ; 0=白底黑字, 1=黑底白字
+BLINK_SPEED EQU 10      ; 閃爍速度 (每10幀切換一次，更快閃爍)
 
 .code
 
@@ -99,30 +102,33 @@ initBlock ENDP
 ;------------------------------------------------
 ; 畫方塊
 ;------------------------------------------------
-drawBlock PROC USES eax
+drawBlock PROC USES eax esi
     push DWORD PTR outerBoxPos
     mov ax, blockPos.X
     mov dx, blockPos.Y
     mov outerBoxPos.X, ax
     mov outerBoxPos.Y, dx
 
-    ; 畫上 (使用黑底白字)
-    INVOKE WriteConsoleOutputAttribute, outputHandle, ADDR cursorAttributes, blockWidth, outerBoxPos, ADDR cellsWritten
+    ; 獲取閃爍顏色屬性
+    call getBlinkColorAttributes
+    
+    ; 畫上 (使用閃爍顏色)
+    INVOKE WriteConsoleOutputAttribute, outputHandle, esi, blockWidth, outerBoxPos, ADDR cellsWritten
     INVOKE WriteConsoleOutputCharacter, outputHandle, ADDR BlockTop, blockWidth, outerBoxPos, ADDR count
     inc outerBoxPos.Y
 
-    ; 畫中 (使用黑底白字)
+    ; 畫中 (使用閃爍顏色)
     mov cx, blockHeight-2
 L2:
     push cx
-    INVOKE WriteConsoleOutputAttribute, outputHandle, ADDR cursorAttributes, blockWidth, outerBoxPos, ADDR cellsWritten
+    INVOKE WriteConsoleOutputAttribute, outputHandle, esi, blockWidth, outerBoxPos, ADDR cellsWritten
     INVOKE WriteConsoleOutputCharacter, outputHandle, ADDR BlockBody, blockWidth, outerBoxPos, ADDR count
     inc outerBoxPos.Y
     pop cx
     loop L2
 
-    ; 畫下 (使用黑底白字)
-    INVOKE WriteConsoleOutputAttribute, outputHandle, ADDR cursorAttributes, blockWidth, outerBoxPos, ADDR cellsWritten
+    ; 畫下 (使用閃爍顏色)
+    INVOKE WriteConsoleOutputAttribute, outputHandle, esi, blockWidth, outerBoxPos, ADDR cellsWritten
     INVOKE WriteConsoleOutputCharacter, outputHandle, ADDR BlockBottom, blockWidth, outerBoxPos, ADDR count
     pop DWORD PTR outerBoxPos
     ret
@@ -133,12 +139,23 @@ drawBlock ENDP
 ;------------------------------------------------
 moveBlock PROC
 START_MOVE:
+    ; 更新閃爍狀態
+    call updateBlinkState
+    
     call Clrscr
     call outerBox
     call drawBlock
     call drawAllTowers
 
-    call ReadChar
+    ; 添加短暫延遲使閃爍可見
+    mov eax, 50
+    call Delay
+    
+    ; 檢查是否有按鍵輸入（非阻塞）
+    call ReadKey
+    jz NO_KEY_PRESSED  ; 如果沒有按鍵，跳過按鍵處理
+    
+    ; 有按鍵輸入，處理按鍵
 
     ; 檢查放置Tower的鍵
     .IF ax == 1e61h      ; a鍵
@@ -194,6 +211,7 @@ START_MOVE:
         jmp EXIT_MOVE
     .ENDIF
 
+NO_KEY_PRESSED:
 END_MOVE:
     jmp START_MOVE
 EXIT_MOVE:
@@ -540,10 +558,57 @@ getTowerColorAttributes PROC
     ret
     
 USE_CURSOR_COLOR_TOWER:
-    ; 使用游標顏色
+    ; 使用閃爍顏色 - 根據閃爍狀態選擇
+    mov eax, blinkState
+    cmp eax, 0
+    je USE_NORMAL_BLINK
+    
+    ; 閃爍狀態1: 黑底白字
     mov esi, OFFSET cursorAttributes
     ret
+    
+USE_NORMAL_BLINK:
+    ; 閃爍狀態0: 白底黑字
+    mov esi, OFFSET blockAttributes
+    ret
 getTowerColorAttributes ENDP
+
+;------------------------------------------------
+; 更新閃爍狀態
+;------------------------------------------------
+updateBlinkState PROC
+    inc blinkCounter
+    mov eax, blinkCounter
+    cmp eax, BLINK_SPEED
+    jl NO_BLINK_CHANGE
+    
+    ; 重置計數器並切換狀態
+    mov blinkCounter, 0
+    mov eax, blinkState
+    xor eax, 1          ; 0變1, 1變0
+    mov blinkState, eax
+    
+NO_BLINK_CHANGE:
+    ret
+updateBlinkState ENDP
+
+;------------------------------------------------
+; 獲取游標區塊的閃爍顏色屬性
+;------------------------------------------------
+getBlinkColorAttributes PROC
+    mov eax, blinkState
+    cmp eax, 0
+    je USE_NORMAL_CURSOR_COLOR
+    
+    ; 閃爍狀態1: 黑底白字
+    mov esi, OFFSET cursorAttributes
+    ret
+    
+USE_NORMAL_CURSOR_COLOR:
+    ; 閃爍狀態0: 白底黑字
+    mov esi, OFFSET blockAttributes
+    ret
+getBlinkColorAttributes ENDP
 
 ;------------------------------------------------
 ; 繪製a鍵
