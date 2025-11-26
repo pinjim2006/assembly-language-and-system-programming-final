@@ -35,6 +35,7 @@ blockPos COORD <?, ?>
 cellsWritten DWORD ?
 outerAttributes WORD outerBoxWidth DUP(0F0h)  ; 白底黑字
 blockAttributes WORD blockWidth DUP(0F0h)     ; 白底黑字
+cursorAttributes WORD blockWidth DUP(0Fh)     ; 黑底白字 (游標位置)
 
 hConsole HANDLE ?
 
@@ -45,6 +46,7 @@ towersPosY WORD towerMax DUP(?)  ; Y位置
 towersType BYTE towerMax DUP(?)  ; 類型
 towerCount DWORD 0
 tempBuffer BYTE blockWidth DUP(?)
+useCursorColor DWORD 0  ; 0=使用正常顏色, 1=使用游標顏色
 
 .code
 
@@ -104,23 +106,23 @@ drawBlock PROC USES eax
     mov outerBoxPos.X, ax
     mov outerBoxPos.Y, dx
 
-    ; 畫上
-    INVOKE WriteConsoleOutputAttribute, outputHandle, ADDR blockAttributes, blockWidth, outerBoxPos, ADDR cellsWritten
+    ; 畫上 (使用黑底白字)
+    INVOKE WriteConsoleOutputAttribute, outputHandle, ADDR cursorAttributes, blockWidth, outerBoxPos, ADDR cellsWritten
     INVOKE WriteConsoleOutputCharacter, outputHandle, ADDR BlockTop, blockWidth, outerBoxPos, ADDR count
     inc outerBoxPos.Y
 
-    ; 畫中
+    ; 畫中 (使用黑底白字)
     mov cx, blockHeight-2
 L2:
     push cx
-    INVOKE WriteConsoleOutputAttribute, outputHandle, ADDR blockAttributes, blockWidth, outerBoxPos, ADDR cellsWritten
+    INVOKE WriteConsoleOutputAttribute, outputHandle, ADDR cursorAttributes, blockWidth, outerBoxPos, ADDR cellsWritten
     INVOKE WriteConsoleOutputCharacter, outputHandle, ADDR BlockBody, blockWidth, outerBoxPos, ADDR count
     inc outerBoxPos.Y
     pop cx
     loop L2
 
-    ; 畫下
-    INVOKE WriteConsoleOutputAttribute, outputHandle, ADDR blockAttributes, blockWidth, outerBoxPos, ADDR cellsWritten
+    ; 畫下 (使用黑底白字)
+    INVOKE WriteConsoleOutputAttribute, outputHandle, ADDR cursorAttributes, blockWidth, outerBoxPos, ADDR cellsWritten
     INVOKE WriteConsoleOutputCharacter, outputHandle, ADDR BlockBottom, blockWidth, outerBoxPos, ADDR count
     pop DWORD PTR outerBoxPos
     ret
@@ -480,6 +482,9 @@ drawTower PROC USES eax ebx ecx edi esi
     add esi, eax  ; BYTE 大小
     mov bl, BYTE PTR [esi]
 
+    ; 檢查是否與游標位置重疊
+    call checkIfCursorOverlapsTower
+    
     ; 根據類型畫不同樣式的塔
     .IF bl == 1      ; a鍵
         call drawATower
@@ -491,7 +496,7 @@ drawTower PROC USES eax ebx ecx edi esi
         call drawDTower
     .ELSEIF bl == 5  ; e鍵
         call drawETower
-    .ELSE            ; 預設
+    .ELSE            ; 預設基礎塔
         call drawATower
     .ENDIF
     
@@ -500,11 +505,54 @@ drawTower PROC USES eax ebx ecx edi esi
 drawTower ENDP
 
 ;------------------------------------------------
+; 檢查游標是否與當前塔位置重疊
+;------------------------------------------------
+checkIfCursorOverlapsTower PROC
+    ; 比較 X 座標
+    mov ax, outerBoxPos.X
+    cmp ax, blockPos.X
+    jne NO_OVERLAP_TOWER
+    
+    ; 比較 Y 座標
+    mov ax, outerBoxPos.Y
+    cmp ax, blockPos.Y
+    jne NO_OVERLAP_TOWER
+    
+    ; 位置重疊，設定使用游標顏色
+    mov useCursorColor, 1
+    ret
+    
+NO_OVERLAP_TOWER:
+    ; 位置不重疊，使用正常顏色
+    mov useCursorColor, 0
+    ret
+checkIfCursorOverlapsTower ENDP
+
+;------------------------------------------------
+; 取得適當的顏色屬性 (返回在 ESI)
+;------------------------------------------------
+getTowerColorAttributes PROC
+    cmp useCursorColor, 1
+    je USE_CURSOR_COLOR_TOWER
+    
+    ; 使用正常顏色
+    mov esi, OFFSET blockAttributes
+    ret
+    
+USE_CURSOR_COLOR_TOWER:
+    ; 使用游標顏色
+    mov esi, OFFSET cursorAttributes
+    ret
+getTowerColorAttributes ENDP
+
+;------------------------------------------------
 ; 繪製a鍵
 ;------------------------------------------------
-drawATower PROC
+drawATower PROC USES esi
+    call getTowerColorAttributes
+    
     ; 頂：█████
-    INVOKE WriteConsoleOutputAttribute, outputHandle, ADDR blockAttributes, blockWidth, outerBoxPos, ADDR cellsWritten
+    INVOKE WriteConsoleOutputAttribute, outputHandle, esi, blockWidth, outerBoxPos, ADDR cellsWritten
     mov tempBuffer, 0DBh    ; █
     mov tempBuffer+1, 0DBh  ; █
     mov tempBuffer+2, 0DBh  ; █
@@ -514,7 +562,7 @@ drawATower PROC
     inc outerBoxPos.Y
 
     ; 中：█ ● █
-    INVOKE WriteConsoleOutputAttribute, outputHandle, ADDR blockAttributes, blockWidth, outerBoxPos, ADDR cellsWritten
+    INVOKE WriteConsoleOutputAttribute, outputHandle, esi, blockWidth, outerBoxPos, ADDR cellsWritten
     mov tempBuffer, 0DBh    ; █
     mov tempBuffer+1, ' '
     mov tempBuffer+2, 07h   ; ●
@@ -524,7 +572,7 @@ drawATower PROC
     inc outerBoxPos.Y
 
     ; 底：█████
-    INVOKE WriteConsoleOutputAttribute, outputHandle, ADDR blockAttributes, blockWidth, outerBoxPos, ADDR cellsWritten
+    INVOKE WriteConsoleOutputAttribute, outputHandle, esi, blockWidth, outerBoxPos, ADDR cellsWritten
     mov tempBuffer, 0DBh    ; █
     mov tempBuffer+1, 0DBh  ; █
     mov tempBuffer+2, 0DBh  ; █
@@ -537,9 +585,11 @@ drawATower ENDP
 ;------------------------------------------------
 ; 繪製b鍵
 ;------------------------------------------------
-drawBTower PROC
+drawBTower PROC USES esi
+    call getTowerColorAttributes
+    
     ; 頂：▲▲▲▲▲
-    INVOKE WriteConsoleOutputAttribute, outputHandle, ADDR blockAttributes, blockWidth, outerBoxPos, ADDR cellsWritten
+    INVOKE WriteConsoleOutputAttribute, outputHandle, esi, blockWidth, outerBoxPos, ADDR cellsWritten
     mov tempBuffer, 1Eh     ; ▲
     mov tempBuffer+1, 1Eh   ; ▲
     mov tempBuffer+2, 1Eh   ; ▲
@@ -549,7 +599,7 @@ drawBTower PROC
     inc outerBoxPos.Y
 
     ; 中：║ ♦ ║
-    INVOKE WriteConsoleOutputAttribute, outputHandle, ADDR blockAttributes, blockWidth, outerBoxPos, ADDR cellsWritten
+    INVOKE WriteConsoleOutputAttribute, outputHandle, esi, blockWidth, outerBoxPos, ADDR cellsWritten
     mov tempBuffer, 0BAh    ; ║
     mov tempBuffer+1, ' '
     mov tempBuffer+2, 04h   ; ♦
@@ -559,7 +609,7 @@ drawBTower PROC
     inc outerBoxPos.Y
 
     ; 底：═════
-    INVOKE WriteConsoleOutputAttribute, outputHandle, ADDR blockAttributes, blockWidth, outerBoxPos, ADDR cellsWritten
+    INVOKE WriteConsoleOutputAttribute, outputHandle, esi, blockWidth, outerBoxPos, ADDR cellsWritten
     mov tempBuffer, 0CDh    ; ═
     mov tempBuffer+1, 0CDh  ; ═
     mov tempBuffer+2, 0CDh  ; ═
@@ -572,9 +622,11 @@ drawBTower ENDP
 ;------------------------------------------------
 ; 繪製c鍵
 ;------------------------------------------------
-drawCTower PROC
+drawCTower PROC USES esi
+    call getTowerColorAttributes
+    
     ; 頂： ╔═╗ 
-    INVOKE WriteConsoleOutputAttribute, outputHandle, ADDR blockAttributes, blockWidth, outerBoxPos, ADDR cellsWritten
+    INVOKE WriteConsoleOutputAttribute, outputHandle, esi, blockWidth, outerBoxPos, ADDR cellsWritten
     mov tempBuffer, ' '
     mov tempBuffer+1, 0C9h  ; ╔
     mov tempBuffer+2, 0CDh  ; ═
@@ -584,7 +636,7 @@ drawCTower PROC
     inc outerBoxPos.Y
 
     ; 中：►♠ ◄
-    INVOKE WriteConsoleOutputAttribute, outputHandle, ADDR blockAttributes, blockWidth, outerBoxPos, ADDR cellsWritten
+    INVOKE WriteConsoleOutputAttribute, outputHandle, esi, blockWidth, outerBoxPos, ADDR cellsWritten
     mov tempBuffer, 10h     ; ►
     mov tempBuffer+1, 06h   ; ♠
     mov tempBuffer+2, ' '
@@ -594,7 +646,7 @@ drawCTower PROC
     inc outerBoxPos.Y
 
     ; 底： ╚═╝ 
-    INVOKE WriteConsoleOutputAttribute, outputHandle, ADDR blockAttributes, blockWidth, outerBoxPos, ADDR cellsWritten
+    INVOKE WriteConsoleOutputAttribute, outputHandle, esi, blockWidth, outerBoxPos, ADDR cellsWritten
     mov tempBuffer, ' '
     mov tempBuffer+1, 0C8h  ; ╚
     mov tempBuffer+2, 0CDh  ; ═
@@ -607,9 +659,11 @@ drawCTower ENDP
 ;------------------------------------------------
 ; 繪製d鍵
 ;------------------------------------------------
-drawDTower PROC
+drawDTower PROC USES esi
+    call getTowerColorAttributes
+    
     ; 頂：※※※※※
-    INVOKE WriteConsoleOutputAttribute, outputHandle, ADDR blockAttributes, blockWidth, outerBoxPos, ADDR cellsWritten
+    INVOKE WriteConsoleOutputAttribute, outputHandle, esi, blockWidth, outerBoxPos, ADDR cellsWritten
     mov tempBuffer, 15h     ; ※
     mov tempBuffer+1, 15h   ; ※
     mov tempBuffer+2, 15h   ; ※
@@ -619,7 +673,7 @@ drawDTower PROC
     inc outerBoxPos.Y
 
     ; 中：~ ☼ ~
-    INVOKE WriteConsoleOutputAttribute, outputHandle, ADDR blockAttributes, blockWidth, outerBoxPos, ADDR cellsWritten
+    INVOKE WriteConsoleOutputAttribute, outputHandle, esi, blockWidth, outerBoxPos, ADDR cellsWritten
     mov tempBuffer, 7Eh     ; ~
     mov tempBuffer+1, ' '
     mov tempBuffer+2, 0Fh   ; ☼
@@ -629,7 +683,7 @@ drawDTower PROC
     inc outerBoxPos.Y
 
     ; 底：∩∩∩∩∩
-    INVOKE WriteConsoleOutputAttribute, outputHandle, ADDR blockAttributes, blockWidth, outerBoxPos, ADDR cellsWritten
+    INVOKE WriteConsoleOutputAttribute, outputHandle, esi, blockWidth, outerBoxPos, ADDR cellsWritten
     mov tempBuffer, 0E9h    ; ∩
     mov tempBuffer+1, 0E9h  ; ∩
     mov tempBuffer+2, 0E9h  ; ∩
@@ -642,9 +696,11 @@ drawDTower ENDP
 ;------------------------------------------------
 ; 繪製e鍵
 ;------------------------------------------------
-drawETower PROC
+drawETower PROC USES esi
+    call getTowerColorAttributes
+    
     ; 頂：♫♪♫♪♫
-    INVOKE WriteConsoleOutputAttribute, outputHandle, ADDR blockAttributes, blockWidth, outerBoxPos, ADDR cellsWritten
+    INVOKE WriteConsoleOutputAttribute, outputHandle, esi, blockWidth, outerBoxPos, ADDR cellsWritten
     mov tempBuffer, 0Eh     ; ♫
     mov tempBuffer+1, 0Dh   ; ♪
     mov tempBuffer+2, 0Eh   ; ♫
@@ -654,7 +710,7 @@ drawETower PROC
     inc outerBoxPos.Y
 
     ; 中：◄ ♥ ►
-    INVOKE WriteConsoleOutputAttribute, outputHandle, ADDR blockAttributes, blockWidth, outerBoxPos, ADDR cellsWritten
+    INVOKE WriteConsoleOutputAttribute, outputHandle, esi, blockWidth, outerBoxPos, ADDR cellsWritten
     mov tempBuffer, 11h     ; ◄
     mov tempBuffer+1, ' '
     mov tempBuffer+2, 03h   ; ♥
@@ -664,7 +720,7 @@ drawETower PROC
     inc outerBoxPos.Y
 
     ; 底：▼▼▼▼▼
-    INVOKE WriteConsoleOutputAttribute, outputHandle, ADDR blockAttributes, blockWidth, outerBoxPos, ADDR cellsWritten
+    INVOKE WriteConsoleOutputAttribute, outputHandle, esi, blockWidth, outerBoxPos, ADDR cellsWritten
     mov tempBuffer, 1Fh     ; ▼
     mov tempBuffer+1, 1Fh   ; ▼
     mov tempBuffer+2, 1Fh   ; ▼
