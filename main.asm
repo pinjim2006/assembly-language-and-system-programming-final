@@ -40,8 +40,8 @@ cursorAttributes WORD blockWidth DUP(0Fh)     ; 黑底白字 (游標位置)
 hConsole HANDLE ?
 
 ; Tower 相關
-towerMax EQU 30
-towersPosX WORD towerMax DUP(?)  ; 最多10個tower的X位置
+towerMax EQU 30 ; tower 上限設定
+towersPosX WORD towerMax DUP(?)  ; X位置
 towersPosY WORD towerMax DUP(?)  ; Y位置
 towersType BYTE towerMax DUP(?)  ; 類型
 towerCount DWORD 0
