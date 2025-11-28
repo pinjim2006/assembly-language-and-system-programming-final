@@ -10,6 +10,21 @@ outerBoxHeight = 26
 blockWidth  = 5
 blockHeight = 3
 
+; 地圖系統常數
+MAP_WIDTH = 16      ; 地圖格子寬度 (84/5 - 1 邊框 = 16格)
+MAP_HEIGHT = 8      ; 地圖格子高度 (26/3 - 1 邊框 = 8格)
+
+; 地圖元件類型常數
+COMPONENT_EMPTY = 0     ; 空地 (可放塔)
+COMPONENT_OUTLET = 1    ; 出口 (怪物出生點)
+COMPONENT_EXIT = 2      ; 終點
+COMPONENT_PATH_H = 3    ; 水平路徑
+COMPONENT_PATH_V = 4    ; 垂直路徑
+COMPONENT_CORNER_1 = 5  ; 轉角1
+COMPONENT_CORNER_2 = 6  ; 轉角2
+COMPONENT_CORNER_3 = 7  ; 轉角3
+COMPONENT_CORNER_4 = 8  ; 轉角4
+
 .data
 ; 外框字元
 outerBoxTop    BYTE 0DAh, 82 DUP(0C4h), 0BFh
@@ -50,6 +65,59 @@ useCursorColor DWORD 0  ; 0=使用正常顏色, 1=使用游標顏色
 blinkCounter DWORD 0    ; 閃爍計數器
 blinkState DWORD 0      ; 0=白底黑字, 1=黑底白字
 BLINK_SPEED EQU 10      ; 閃爍速度 (每10幀切換一次，更快閃爍)
+
+; 地圖系統變數
+mapData BYTE (MAP_WIDTH * MAP_HEIGHT) DUP(0)  ; 地圖資料
+
+; 地圖1的資料
+map1Data BYTE 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
+         BYTE 0,1,0,6,3,3,3,3,3,3,3,5,0,2,0,0
+         BYTE 0,4,0,4,0,0,0,0,0,0,0,4,0,4,0,0
+         BYTE 0,4,0,4,0,0,6,3,3,3,3,8,0,4,0,0
+         BYTE 0,4,0,4,0,0,4,0,0,0,0,0,0,4,0,0
+         BYTE 0,4,0,4,0,0,4,0,0,0,0,0,0,4,0,0
+         BYTE 0,7,3,8,0,0,7,3,3,3,3,3,3,8,0,0
+         BYTE 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
+
+; 元件字元資料
+componentChars LABEL BYTE
+; 元件0: 空地 (無字元)
+component0 BYTE 5 DUP(20h)
+           BYTE 5 DUP(20h) 
+           BYTE 5 DUP(20h)
+; 元件1: 怪物出口
+component1 BYTE 5 DUP(20h)
+           BYTE 20h, 3 DUP(0DCh), 20h
+           BYTE 0DEh, 0DBh, 0DFh, 0DBh, 0DDh
+; 元件2: 終點
+component2 BYTE 5 DUP(20h)
+           BYTE 20h, 3 DUP(0DCh), 20h
+           BYTE 0DEh, 3 DUP(0B0h), 0DDh
+; 元件3: 水平路徑
+component3 BYTE 5 DUP(20h)
+           BYTE 5 DUP(0B0h)
+           BYTE 5 DUP(20h)
+; 元件4: 垂直路徑
+component4 BYTE 20h, 3 DUP(0B0h), 20h
+           BYTE 20h, 3 DUP(0B0h), 20h
+           BYTE 20h, 3 DUP(0B0h), 20h
+; 元件5: 轉角1 (右上)
+component5 BYTE 5 DUP(20h)
+           BYTE 4 DUP(0B0h), 20h
+           BYTE 20h, 3 DUP(0B0h), 20h
+           
+; 元件6: 轉角2 (左上)
+component6 BYTE 5 DUP(20h)
+           BYTE 20h, 4 DUP(0B0h)
+           BYTE 20h, 3 DUP(0B0h), 20h
+; 元件7: 轉角3 (左下)
+component7 BYTE 20h, 3 DUP(0B0h), 20h
+           BYTE 20h, 4 DUP(0B0h)
+           BYTE 5 DUP(20h)
+; 元件8: 轉角4 (右下)
+component8 BYTE 20h, 3 DUP(0B0h), 20h
+           BYTE 4 DUP(0B0h), 20h
+           BYTE 5 DUP(20h)
 
 .code
 
@@ -103,6 +171,11 @@ initBlock ENDP
 ; 畫方塊
 ;------------------------------------------------
 drawBlock PROC USES eax esi
+    ; 檢查游標位置是否有地圖元件
+    call hasMapComponentAtCursor
+    cmp eax, 1
+    je SKIP_DRAW_CURSOR_FRAME     ; 如果有地圖元件，不繪製框框
+
     push DWORD PTR outerBoxPos
     mov ax, blockPos.X
     mov dx, blockPos.Y
@@ -131,8 +204,130 @@ L2:
     INVOKE WriteConsoleOutputAttribute, outputHandle, esi, blockWidth, outerBoxPos, ADDR cellsWritten
     INVOKE WriteConsoleOutputCharacter, outputHandle, ADDR BlockBottom, blockWidth, outerBoxPos, ADDR count
     pop DWORD PTR outerBoxPos
+
+SKIP_DRAW_CURSOR_FRAME:
     ret
 drawBlock ENDP
+
+;------------------------------------------------
+; 檢查游標位置是否有地圖元件 (不包括空地)
+; 輸出: EAX = 1 有地圖元件, 0 空地
+;------------------------------------------------
+hasMapComponentAtCursor PROC USES ebx ecx esi
+    ; 將像素座標轉換為地圖格子座標
+    movzx eax, blockPos.X
+    sub eax, 7          ; 減去初始偏移
+    mov ebx, blockWidth
+    xor edx, edx
+    div ebx             ; EAX = 格子X座標
+    mov ebx, eax        ; 保存X座標
+    
+    movzx eax, blockPos.Y
+    sub eax, 4          ; 減去初始偏移
+    mov ecx, blockHeight
+    xor edx, edx
+    div ecx             ; EAX = 格子Y座標
+    
+    ; 檢查座標是否在有效範圍內
+    cmp ebx, MAP_WIDTH
+    jge NO_MAP_COMPONENT
+    cmp eax, MAP_HEIGHT
+    jge NO_MAP_COMPONENT
+    cmp ebx, 0
+    jl NO_MAP_COMPONENT
+    cmp eax, 0
+    jl NO_MAP_COMPONENT
+    
+    ; 計算地圖資料的索引
+    mov ecx, MAP_WIDTH
+    mul ecx             ; EAX = Y * MAP_WIDTH
+    add eax, ebx        ; EAX = Y * MAP_WIDTH + X
+    
+    ; 取得地圖資料
+    mov esi, OFFSET mapData
+    add esi, eax
+    mov al, BYTE PTR [esi]
+    
+    ; 檢查是否為空地
+    cmp al, COMPONENT_EMPTY
+    je NO_MAP_COMPONENT
+    
+    ; 有地圖元件
+    mov eax, 1
+    ret
+    
+NO_MAP_COMPONENT:
+    mov eax, 0
+    ret
+hasMapComponentAtCursor ENDP
+
+;------------------------------------------------
+; 在地圖元件上繪製游標反白效果
+;------------------------------------------------
+drawCursorOnComponent PROC USES eax ebx ecx edx esi edi
+    ; 將像素座標轉換為地圖格子座標
+    movzx eax, blockPos.X
+    sub eax, 7          ; 減去初始偏移
+    mov ebx, blockWidth
+    xor edx, edx
+    div ebx             ; EAX = 格子X座標
+    mov ebx, eax        ; 保存X座標
+    
+    movzx eax, blockPos.Y
+    sub eax, 4          ; 減去初始偏移
+    mov ecx, blockHeight
+    xor edx, edx
+    div ecx             ; EAX = 格子Y座標
+    
+    ; 檢查座標是否在有效範圍內
+    cmp ebx, MAP_WIDTH
+    jge SKIP_CURSOR_HIGHLIGHT
+    cmp eax, MAP_HEIGHT
+    jge SKIP_CURSOR_HIGHLIGHT
+    cmp ebx, 0
+    jl SKIP_CURSOR_HIGHLIGHT
+    cmp eax, 0
+    jl SKIP_CURSOR_HIGHLIGHT
+    
+    ; 計算地圖資料的索引
+    mov ecx, MAP_WIDTH
+    mul ecx             ; EAX = Y * MAP_WIDTH
+    add eax, ebx        ; EAX = Y * MAP_WIDTH + X
+    
+    ; 取得地圖資料
+    mov esi, OFFSET mapData
+    add esi, eax
+    mov cl, BYTE PTR [esi]  ; 取得元件類型
+    
+    ; 如果不是空地，在元件上繪製反白效果
+    cmp cl, COMPONENT_EMPTY
+    je SKIP_CURSOR_HIGHLIGHT
+    
+    ; 恢復格子座標到 EAX(Y), EBX(X)
+    movzx eax, blockPos.Y
+    sub eax, 4
+    mov ecx, blockHeight
+    xor edx, edx
+    div ecx             ; EAX = Y座標
+    
+    ; 計算螢幕座標
+    call calculateScreenPosition
+    
+    ; 獲取閃爍顏色屬性
+    call getBlinkColorAttributes
+    
+    ; 在元件上繪製反白效果 (只改變屬性，不改變字元)
+    mov ecx, blockHeight
+CURSOR_HIGHLIGHT_Y_LOOP:
+    push ecx
+    INVOKE WriteConsoleOutputAttribute, outputHandle, esi, blockWidth, outerBoxPos, ADDR cellsWritten
+    inc outerBoxPos.Y
+    pop ecx
+    loop CURSOR_HIGHLIGHT_Y_LOOP
+    
+SKIP_CURSOR_HIGHLIGHT:
+    ret
+drawCursorOnComponent ENDP
 
 ;------------------------------------------------
 ; 移動方塊 (修改版本，加入預設處理)
@@ -144,7 +339,9 @@ START_MOVE:
     
     call Clrscr
     call outerBox
+    call drawMapComponents  ; 繪製地圖元件
     call drawBlock
+    call drawCursorOnComponent  ; 在地圖元件上繪製游標反白效果
     call drawAllTowers
 
     ; 添加短暫延遲使閃爍可見
@@ -237,6 +434,11 @@ addTowerWithType PROC USES eax ecx esi
     call checkTowerAtCurrentPosition
     cmp eax, 1
     je NO_ADD_TYPE      ; 如果已有塔，不放置
+    
+    ; 檢查是否可以在當前位置放置塔 (地圖限制)
+    call canPlaceTowerAtCurrentPos
+    cmp eax, 0
+    je NO_ADD_TYPE      ; 如果地圖不允許，不放置
     
     mov eax, towerCount
     cmp eax, towerMax
@@ -611,6 +813,205 @@ USE_NORMAL_CURSOR_COLOR:
 getBlinkColorAttributes ENDP
 
 ;------------------------------------------------
+; 初始化地圖系統
+;------------------------------------------------
+initMapSystem PROC USES eax ecx esi edi
+    ; 載入地圖1的資料
+    mov esi, OFFSET map1Data
+    mov edi, OFFSET mapData
+    mov ecx, (MAP_WIDTH * MAP_HEIGHT)
+    rep movsb   
+    ret
+initMapSystem ENDP
+
+;------------------------------------------------
+; 檢查指定位置是否可以放置塔
+; 輸入: blockPos.X, blockPos.Y (游標位置)
+; 輸出: EAX = 1 可放置, 0 不可放置
+;------------------------------------------------
+canPlaceTowerAtCurrentPos PROC USES ebx ecx esi
+    ; 將像素座標轉換為地圖格子座標
+    movzx eax, blockPos.X
+    sub eax, 7          ; 減去初始偏移
+    mov ebx, blockWidth
+    xor edx, edx
+    div ebx             ; EAX = 格子X座標
+    mov ebx, eax        ; 保存X座標
+    
+    movzx eax, blockPos.Y
+    sub eax, 4          ; 減去初始偏移
+    mov ecx, blockHeight
+    xor edx, edx
+    div ecx             ; EAX = 格子Y座標
+    
+    ; 檢查座標是否在有效範圍內
+    cmp ebx, MAP_WIDTH
+    jge CANNOT_PLACE
+    cmp eax, MAP_HEIGHT
+    jge CANNOT_PLACE
+    cmp ebx, 0
+    jl CANNOT_PLACE
+    cmp eax, 0
+    jl CANNOT_PLACE
+    
+    ; 計算地圖資料的索引
+    mov ecx, MAP_WIDTH
+    mul ecx             ; EAX = Y * MAP_WIDTH
+    add eax, ebx        ; EAX = Y * MAP_WIDTH + X
+    
+    ; 取得地圖資料
+    mov esi, OFFSET mapData
+    add esi, eax
+    mov al, BYTE PTR [esi]
+    
+    ; 檢查格子類型 (只有空地才能放塔)
+    cmp al, COMPONENT_EMPTY
+    je CAN_PLACE
+    
+CANNOT_PLACE:
+    mov eax, 0
+    ret
+    
+CAN_PLACE:
+    mov eax, 1
+    ret
+canPlaceTowerAtCurrentPos ENDP
+
+;------------------------------------------------
+; 繪製地圖元件
+;------------------------------------------------
+drawMapComponents PROC USES eax ebx ecx edx esi edi
+    mov eax, 0          ; Y座標
+    
+DRAW_MAP_Y_LOOP:
+    cmp eax, MAP_HEIGHT
+    jge DRAW_MAP_DONE
+    
+    mov ebx, 0          ; X座標
+    
+DRAW_MAP_X_LOOP:
+    cmp ebx, MAP_WIDTH
+    jge NEXT_MAP_Y
+    
+    ; 計算當前格子的資料索引
+    push eax
+    push ebx
+    mov ecx, MAP_WIDTH
+    mul ecx             ; EAX = Y * MAP_WIDTH
+    add eax, ebx        ; EAX = Y * MAP_WIDTH + X
+    mov esi, OFFSET mapData
+    add esi, eax
+    mov cl, BYTE PTR [esi]  ; 取得元件類型
+    pop ebx
+    pop eax
+    
+    ; 如果不是空地，繪製元件
+    cmp cl, COMPONENT_EMPTY
+    je NEXT_MAP_X
+    
+    ; 繪製元件
+    call drawComponent
+    
+NEXT_MAP_X:
+    inc ebx
+    jmp DRAW_MAP_X_LOOP
+    
+NEXT_MAP_Y:
+    inc eax
+    jmp DRAW_MAP_Y_LOOP
+    
+DRAW_MAP_DONE:
+    ret
+drawMapComponents ENDP
+
+;------------------------------------------------
+; 繪製單個元件
+; 輸入: EAX=Y座標, EBX=X座標, CL=元件類型
+;------------------------------------------------
+drawComponent PROC USES eax ebx ecx edx esi edi
+    ; 計算螢幕座標
+    push ecx            ; 保存元件類型
+    call calculateScreenPosition
+    pop ecx             ; 恢復元件類型
+    
+    ; 計算元件字元的起始位置
+    movzx eax, cl       ; 元件類型
+    mov edx, 15         ; 每個元件15個字元 (5x3)
+    mul edx
+    mov esi, OFFSET componentChars
+    add esi, eax        ; ESI指向元件字元
+    
+    ; 繪製3行
+    mov ecx, blockHeight
+DRAW_COMPONENT_Y_LOOP:
+    push ecx
+    
+    ; 輸出一行字元到螢幕
+    INVOKE WriteConsoleOutputCharacter, outputHandle, esi, blockWidth, outerBoxPos, ADDR count
+    
+    ; 設定白底黑字屬性
+    INVOKE WriteConsoleOutputAttribute, outputHandle, ADDR blockAttributes, blockWidth, outerBoxPos, ADDR cellsWritten
+    
+    ; 移動到下一行字元位置
+    add esi, blockWidth
+    inc outerBoxPos.Y
+    pop ecx
+    loop DRAW_COMPONENT_Y_LOOP
+    ret
+drawComponent ENDP
+
+;------------------------------------------------
+; 計算螢幕座標 (根據 EAX=Y, EBX=X)
+;------------------------------------------------
+calculateScreenPosition PROC
+    push ebx
+    push eax
+    
+    ; 計算螢幕X座標
+    mov eax, ebx
+    mov ecx, blockWidth
+    mul ecx
+    add eax, 7          ; 加上初始偏移
+    mov outerBoxPos.X, ax
+    
+    ; 計算螢幕Y座標
+    pop eax
+    push eax
+    mov ecx, blockHeight
+    mul ecx
+    add eax, 4          ; 加上初始偏移
+    mov outerBoxPos.Y, ax
+    
+    pop eax
+    pop ebx
+    ret
+calculateScreenPosition ENDP
+
+;------------------------------------------------
+; 檢查游標位置是否有地圖元件或塔
+; 輸出: EAX = 1 有元件或塔, 0 空地
+;------------------------------------------------
+hasComponentOrTowerAtCursor PROC USES ebx ecx esi
+    ; 先檢查是否有塔
+    call checkTowerAtCurrentPosition
+    cmp eax, 1
+    je HAS_SOMETHING
+    
+    ; 檢查是否有地圖元件
+    call canPlaceTowerAtCurrentPos
+    cmp eax, 0          ; 如果不能放塔，表示有元件
+    je HAS_SOMETHING
+    
+    ; 空地
+    mov eax, 0
+    ret
+    
+HAS_SOMETHING:
+    mov eax, 1
+    ret
+hasComponentOrTowerAtCursor ENDP
+
+;------------------------------------------------
 ; 繪製a鍵
 ;------------------------------------------------
 drawATower PROC USES esi
@@ -821,6 +1222,9 @@ main PROC
     INVOKE GetStdHandle, STD_OUTPUT_HANDLE
     mov outputHandle, eax
 
+    ; 初始化地圖系統
+    call initMapSystem
+    
     call initBlock
     call moveBlock
     call Clrscr
