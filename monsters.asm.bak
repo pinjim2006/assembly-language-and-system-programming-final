@@ -206,34 +206,34 @@ createMonsters ENDP
 ;------------------------------------------------		 
 initMonsterData PROC USES eax ebx ecx edx esi edi
     monsterID:BYTE, 
-    pOut:PTR Monster_status    	; Monster_status 變數
+    pOut:PTR Monster_status    ; Monster_status 變數
 
     mov eax, monsterID
-    sub eax, 101            	; EAX:索引
+    sub eax, 101            ;EAX:索引
 
     ; 讀能力值
     mov ebx, OFFSET MonsterTypeTable
     mov ecx, eax
-    imul ecx, 3                	; 對應不同怪的status row
+    imul ecx, 3                ; 對應不同怪的status row
     mov edi, pOut
 
-    mov dx, [ebx+ecx]          	; HP
+    mov dx, [ebx+ecx]          ; HP
     mov [edi].Monster_status.HP, dx
 
-    mov dl, [ebx+ecx+1]        	; Speed
+    mov dl, [ebx+ecx+1]        ; Speed
     mov [edi].Monster_status.Speed, dl
 
-    mov dl, [ebx+ecx+2]        	; Reward
+    mov dl, [ebx+ecx+2]        ; Reward
     mov [edi].Monster_status.Reward, dl
 
     ; 讀圖像 
     mov ebx, OFFSET MonstersChars
     mov ecx, eax
-    imul ecx, 15               	; 對應不同怪的圖像
-    lea esi, [ebx+ecx]         	; 圖像來源
+    imul ecx, 15               ; 對應不同怪的圖像
+    lea esi, [ebx+ecx]         ; 圖像來源
     lea edi, [pOut].Monster_status.Chars ; 結構內圖像起點
     mov ecx, 15
-    rep movsb                  	; 複製圖像
+    rep movsb                  ; 複製圖像
 	
 	ret
 initMonsterData ENDP
@@ -242,11 +242,10 @@ initMonsterData ENDP
 ; 在地圖上生成
 ;------------------------------------------------	
 
-drawMonster PROC USES eax ebx ecx edx esi edi
+drawMonster PROC USES ebx ecx edx esi edi
 
     xor ebx, ebx  ; monster index
-	mov eax, 500  ; delay 要用
-	
+
 nextMonster:
     ;取得怪物結構 
     lea edi, roundMonsters[ebx*SIZE Monster_status]
@@ -261,20 +260,20 @@ nextMonster:
     ; 取得怪物圖像開始地址
     lea esi, [edi].Monster_status.Chars
 
-    mov edx, monsterHeight      	; 怪物高度
+    mov edx, monsterHeight       ; 怪物高度
 rowLoop:
     mov ecx, monsterWidth
     lea edi, charBuf
     cld
-    rep movsb        				; 由 ESI 複製 monsterWidth 個字元到 charBuf
+    rep movsb        ; 由 ESI 複製 monsterWidth 個字元到 charBuf
     invoke WriteConsoleOutputCharacter, outputHandle, ADDR charBuf, monsterWidth, xyPosition, ADDR count
     inc xyPosition.y
-    add esi, monsterWidth  			; 指向下一行圖像
+    add esi, monsterWidth  ; 指向下一行圖像
     dec edx
     jnz rowLoop
 
-    call Delay         				; 停頓500ms再畫下一隻
-    inc ebx            				; 下一隻
+    call Delay         ;停頓500ms再畫下一隻
+    inc ebx            ;下一隻
     jmp nextMonster
 
 done:
