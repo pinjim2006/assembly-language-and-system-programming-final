@@ -579,7 +579,18 @@ START_MOVE:
 DRAW_MENU_STATE:
     call drawTowerMenu          ; 繪製選單
 AFTER_DRAW:
-    
+
+	;怪物指令入口			---------------------------------------------------------	
+    cmp startWave, 1		 ;注意:按下回合開始鍵要把startWave設成1以進入怪物指令入口
+    jne SKIP_SPAWN			;--------------------------------------------------------
+    invoke createMonsters, cur_round      
+    mov startWave, 0         ; 避免無限生怪
+SKIP_SPAWN:
+
+    call updateMonstersPositions      ; 更新怪位置
+    call removeMonsters  	 ; 移除怪
+    call drawMonsters        ; 畫出怪
+	
     mov eax, 50                 ; 延遲控制 Frame Rate
     call Delay
     
@@ -589,7 +600,7 @@ AFTER_DRAW:
     .IF ax == 2166h ; 'f' 鍵 (開關選單)
         call toggleMenuState
     .ENDIF
-
+	
     cmp menuState, 1
     je HANDLE_MENU_INPUT        ; 選單模式輸入
     

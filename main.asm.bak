@@ -1,4 +1,5 @@
 INCLUDE Irvine32.inc
+INCLUDE monsters.asm
 
 ; =================================================================================
 ; 函式原型宣告 (Prototypes)
@@ -578,7 +579,18 @@ START_MOVE:
 DRAW_MENU_STATE:
     call drawTowerMenu          ; 繪製選單
 AFTER_DRAW:
-    
+
+	;怪物指令入口
+    cmp startWave, 1
+    jne SKIP_SPAWN
+    invoke createMonsters, cur_round      
+    mov startWave, 0         ; 避免無限生怪
+SKIP_SPAWN:
+
+    call updateMonstersPositions      ; 更新怪位置
+    call removeMonsters  	 ; 移除怪
+    call drawMonsters        ; 畫出怪
+	
     mov eax, 50                 ; 延遲控制 Frame Rate
     call Delay
     

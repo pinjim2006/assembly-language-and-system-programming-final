@@ -2,13 +2,25 @@ INCLUDE Irvine32.inc
 
 main EQU start@0
 
-createMonsters proto, round:BYTE
 
-initMonsterData proto,
+;------------------------------------------------
+; 函式原型宣告 (Prototypes)
+;------------------------------------------------
+createMonsters PROTO, round:BYTE
+
+initMonsterData PROTO,
 	monsterID:BYTE, 
     pOut:PTR Monster_status 
+	
+drawMonster PROTO
 
-.data
+updateMonstersPositions PROTO
+	
+removeMonsters PROTO
+
+;------------------------------------------------
+;常數定義
+;------------------------------------------------
 
 monsterWidth = 5
 monsterHeight = 3
@@ -24,6 +36,8 @@ MONSTER_ZERA = 107
 MONSTER_KRAKEN = 108
 MONSTER_ABYSSION = 109
 
+.data
+
 ;------------------------------------------------
 ; 定義每回合個別怪物結構
 ;------------------------------------------------
@@ -31,14 +45,22 @@ Monster_status STRUCT
     HP      WORD 0         ; 血量
     Speed   BYTE 0         ; 移動速度
 	Reward  BYTE 0		   ; 擊殺報酬
-    pos COORD <12,10>	   ; 初始座標
+    pos COORD <?, ?>	   ; 初始座標
+	Direction BYTE ?	   ; 判斷移動方向(0:上/1:下/2:左/3:右)
     Chars   BYTE 15 DUP(?) ; 5x3 圖像 
 Monster ENDS
 
 ;每回合怪的暫存陣列
 roundMonsters Monster_status 10 DUP(<>)
 
-monstersAttributes WORD 15 DUP(0Ah)
+;顏色屬性
+monstersAttributes WORD monsterWidth DUP(0Ah)
+
+;怪的起始位置
+monPosInit COORD <12, 10>
+
+;怪的初始移動方向
+map1_InitDirection BYTE 1
 
 ;------------------------------------------------
 ; 定義每種怪物的圖像
@@ -160,11 +182,14 @@ RoundsTable LABEL BYTE
 
 xyPosition COORD <>
 charBuf BYTE monsterWidth DUP(?)
+cur_round  BYTE 1      ; 從第1回合開始打
+startWave  BYTE 0      ; 0 = 等待開始 / 1 = 開始生成怪
 		 
 .code
 ;------------------------------------------------
 ; 尋找該回合要生成的怪物
-;------------------------------------------------	
+;------------------------------------------------
+	
 createMonsters PROC	USES eax ebx ecx edx esi edi
 	round:BYTE
 	
@@ -194,16 +219,14 @@ initData:
     inc ebx
     cmp ebx, ecx
     jb initData
-	
-drawTheMonsters:	
-	call drawMonsters
 
     ret
 createMonsters ENDP
 
 ;------------------------------------------------
 ; 初始化怪物數據
-;------------------------------------------------		 
+;------------------------------------------------	
+	 
 initMonsterData PROC USES eax ebx ecx edx esi edi
     monsterID:BYTE, 
     pOut:PTR Monster_status    	; Monster_status 變數
@@ -218,20 +241,30 @@ initMonsterData PROC USES eax ebx ecx edx esi edi
     mov edi, pOut
 
     mov dx, [ebx+ecx]          	; HP
-    mov [edi].Monster_status.HP, dx
+    mov [edi].HP, dx
 
     mov dl, [ebx+ecx+1]        	; Speed
-    mov [edi].Monster_status.Speed, dl
+    mov [edi].Speed, dl
 
     mov dl, [ebx+ecx+2]        	; Reward
-    mov [edi].Monster_status.Reward, dl
+    mov [edi].Reward, dl
+	
+	; 初始化怪物位置
+	mov dx, monPosInit.x
+	mov [edi].pos.x, dx
+	mov dx, monPosInit.y
+	mov [edi].pos.y, dx
+	
+	;初始化移動方向
+	mov dl, map1_InitDirection
+	mov [edi].Direction, dl
 
     ; 讀圖像 
     mov ebx, OFFSET MonstersChars
     mov ecx, eax
     imul ecx, 15               	; 對應不同怪的圖像
     lea esi, [ebx+ecx]         	; 圖像來源
-    lea edi, [pOut].Monster_status.Chars ; 結構內圖像起點
+    lea edi, [pOut].Chars ; 結構內圖像起點
     mov ecx, 15
     rep movsb                  	; 複製圖像
 	
@@ -251,15 +284,15 @@ nextMonster:
     ;取得怪物結構 
     lea edi, roundMonsters[ebx*SIZE Monster_status]
 
-    ; 判斷是否碰到空struct(HP為空可判斷)
-    cmp [edi].Monster_status.HP, 0
+    ; 判斷是否碰到空struct/怪物死亡或走到終點(SPEED為空可判斷)
+    cmp [edi].Speed, 0
     je done
 
     ; 起始繪製位置
-    mov xyPosition, [edi].Monster_status.pos
+    mov xyPosition, [edi].pos
 
     ; 取得怪物圖像開始地址
-    lea esi, [edi].Monster_status.Chars
+    lea esi, [edi].Chars
 
     mov edx, monsterHeight      	; 怪物高度
 rowLoop:
@@ -267,7 +300,18 @@ rowLoop:
     lea edi, charBuf
     cld
     rep movsb        				; 由 ESI 複製 monsterWidth 個字元到 charBuf
-    invoke WriteConsoleOutputCharacter, outputHandle, ADDR charBuf, monsterWidth, xyPosition, ADDR count
+	INVOKE WriteConsoleOutputAttribute,
+	  outputHandle, 
+	  ADDR monstersAttributes,
+	  monsterWidth, 
+	  xyPosition,
+	  ADDR bytesWritten
+    invoke WriteConsoleOutputCharacter, 
+	  outputHandle, 
+	  ADDR charBuf,
+	  monsterWidth,
+	  xyPosition,
+	  ADDR count
     inc xyPosition.y
     add esi, monsterWidth  			; 指向下一行圖像
     dec edx
@@ -282,5 +326,169 @@ done:
 drawMonster ENDP
 
 ;------------------------------------------------
-; 怪物移動
+; 怪物移動(待更新，可能出現碰觸邊界即轉向之未貼合路徑瑕疵
 ;------------------------------------------------	
+
+updateMonstersPositions PROC USES eax ebx ecx edx esi edi
+
+    xor ebx, ebx      ; 怪的索引
+
+nextMon:
+    lea edi, roundMonsters[ebx*SIZE Monster_status]
+
+    movzx ecx, [edi].Speed   ; speed: 要執行幾次移動
+	cmp ecx, 0
+    jle skip 
+
+move_loop:             
+
+
+; 讀怪獸座標，轉換成地圖索引
+
+    mov dx, [edi].pos.x
+    mov ax, [edi].pos.y
+    
+    sub dx, blockPosInit.x
+    sub ax, blockPosInit.y
+
+    xor edx, edx
+    div blockHeight          
+    xor ah, ah
+    mul MAP_WIDTH
+    mov si, ax
+
+    mov ax, dx
+    div blockWidth           
+    xor ah, ah
+    add si, ax
+
+    mov al, [map1Data + si]
+    mov dl, [edi].Direction
+
+
+; 物件判斷
+
+    cmp al, COMPONENT_EXIT
+    je skip_all
+
+    cmp al, COMPONENT_PATH_H
+    je move_H
+    cmp al, COMPONENT_PATH_V
+    je move_V
+
+    cmp al, COMPONENT_CORNER_1  
+    je turnCorner1
+    cmp al, COMPONENT_CORNER_2  
+    je turnCorner2
+    cmp al, COMPONENT_CORNER_3  
+    je turnCorner3
+    cmp al, COMPONENT_CORNER_4  
+    je turnCorner4
+
+
+; 直走
+move_H:
+    cmp dl, 2   
+    je move_L
+    jmp move_R
+
+move_V:
+    cmp dl, 0   
+    je move_U
+    jmp move_D
+
+
+; 轉角處
+turnCorner1: 
+	.IF dl == 0 
+		mov [edi].Direction, 2 
+		jmp move_left 
+	.ENDIF 
+	mov [edi].Direction, 1 
+	jmp move_down 
+	turnCorner2: 
+	.IF dl == 0 
+		mov [edi].Direction, 3 
+		jmp move_right 
+	.ENDIF 
+	mov [edi].Direction, 1 
+	jmp move_down 
+turnCorner3: 
+	.IF dl == 1 
+		mov [edi].Direction, 3 
+		jmp move_right 
+	.ENDIF 
+	mov [edi].Direction, 0 
+	jmp move_up 
+turnCorner4: 
+	.IF dl == 1 
+		mov [edi].Direction, 2 
+		jmp move_left 
+	.ENDIF 
+	mov [edi].Direction, 0 
+	jmp move_up 
+	
+move_up: 
+	sub [edi].pos.y, 1 
+move_down: 
+	add [edi].pos.y, 1 
+move_left: 
+	sub [edi].pos.x, 1 
+move_right: 
+	add [edi].pos.x, 1
+
+moved:
+    loop move_loop        ; 重複直到完成Speed次移動
+
+
+skip_all:
+skip:
+    inc ebx
+    cmp ebx, 10
+    jb nextMon
+
+    ret
+updateMonstersPositions ENDP
+
+;------------------------------------------------
+; 移除死亡或走到終點的怪
+;------------------------------------------------	
+
+removeMonsters PROC USES ebx edi
+
+    xor ebx, ebx
+
+check:
+    lea edi, roundMonsters[ebx*SIZE Monster_status]
+	
+	cmp	[edi].Speed, 0		  ; 排除空struct/已經死掉或抵達終點的怪
+	je nextMon
+	
+    cmp [edi].HP, 0
+    jle monDead               ; HP=0 清怪
+    cmp [edi].pos.x, 100      ; 判斷是否到終點
+    jne nextMon
+	cmp [edi].pos.y, 100      
+    jne nextMon
+    jmp monArrive
+
+monDead:
+	;------------------------------------
+    ; 奬勵 把SPEED調成0避免重加(待做)
+	;------------------------------------
+	mov WORD PTR [edi].Speed, 0    
+	jmp nextM
+
+monArrive:
+	;------------------------------------
+	; 懲罰 把SPEED調成0避免重加(待做)
+	;------------------------------------
+	mov WORD PTR [edi].Speed, 0
+
+nextM:
+    inc ebx
+    cmp ebx, 10
+    jb check
+	
+    ret
+removeMonsters ENDP
