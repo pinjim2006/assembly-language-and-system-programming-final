@@ -281,8 +281,9 @@ initMonsterData PROC USES eax ebx ecx edx esi edi, monsterID:DWORD, pOut:PTR Mon
     imul ecx, 15                ; 對應不同怪的圖像 (15 bytes)
     lea esi, [ebx+ecx]          ; 圖像來源
     
+    ; 計算 Chars 欄位的實際位址
     mov edi, pOut
-    add edi, OFFSET Monster_status.Chars 
+    add edi, 9                  ; 跳過 HP(2) + Speed(1) + Reward(1) + pos(4) + Direction(1) = 9 bytes
     
     mov ecx, 15
     rep movsb                   ; 複製圖像
@@ -306,21 +307,25 @@ nextMonster:
     ; 手動計算 Struct Offset
     mov eax, SIZE Monster_status
     mul ebx
-    lea edi, roundMonsters[eax]
+    lea edx, roundMonsters[eax]   ; 使用 EDX 存儲怪物結構位址
 
     ; 判斷是否碰到空struct/怪物死亡或走到終點
-    cmp (Monster_status PTR [edi]).Speed, 0
+    cmp (Monster_status PTR [edx]).Speed, 0
     je skip_draw
 
     ; 起始繪製位置
-    mov eax, DWORD PTR (Monster_status PTR [edi]).pos
+    mov eax, DWORD PTR (Monster_status PTR [edx]).pos
     mov DWORD PTR xyPosition, eax
 
-    ; 取得怪物圖像開始地址
-    lea esi, (Monster_status PTR [edi]).Chars
+    ; 取得怪物圖像開始地址 (Chars 欄位偏移 9 bytes)
+    lea esi, [edx + 9]
 
-    mov edx, monsterHeight          ; 怪物高度
+    mov ecx, monsterHeight          ; 怪物高度
 rowLoop:
+    push ecx                        ; 保存外層計數器
+    push esi                        ; 保存圖像位址
+    
+    ; 複製一行圖像到緩衝區
     mov ecx, monsterWidth
     lea edi, charBuf
     cld
@@ -340,9 +345,12 @@ rowLoop:
       xyPosition,
       ADDR count
       
+    pop esi                         ; 恢復圖像位址
+    add esi, monsterWidth           ; 移到下一行
     inc xyPosition.y
-    add esi, monsterWidth           
-    dec edx
+    
+    pop ecx                         ; 恢復外層計數器
+    dec ecx
     jnz rowLoop
 
 skip_draw:
@@ -515,7 +523,7 @@ updateMonstersPositions ENDP
 ; 移除死亡或走到終點的怪
 ; ------------------------------------------------  
 
-removeMonsters PROC USES ebx edi
+removeMonsters PROC USES eax ebx edi
 
     xor ebx, ebx
 

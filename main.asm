@@ -1778,6 +1778,6 @@ DONE:
     ret
 drawAllTowers ENDP
 
-INCLUDE monsters.asm
+INCLUDE monster2.asm
 
 END main
