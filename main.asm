@@ -193,6 +193,7 @@ menuOption2     BYTE "   Restart", 0
 menuOption3     BYTE "   How to Play", 0
 menuOption4     BYTE "   End Game", 0
 menuArrow       BYTE ">>", 0
+twoSpaces       BYTE "  ", 0
 menuPrompt      BYTE "Use Arrow Keys to select, ENTER to confirm", 0
 
 ; 使用說明文字
@@ -324,9 +325,6 @@ showStartScreen PROC USES edx
     call Gotoxy
     mov edx, OFFSET startPrompt
     call WriteString
-    call Gotoxy
-    mov edx, OFFSET startPrompt
-    call WriteString
     
     ; 等待使用者按下 ENTER 鍵
 WAIT_ENTER:
@@ -344,11 +342,13 @@ showStartScreen ENDP
 ; 顯示 ESC 選單
 ; =================================================================================
 showEscMenu PROC USES ebx ecx edx
+    LOCAL oldCursor:BYTE
+    LOCAL keyCode:WORD
+    
     ; 初始化游標位置為第一個選項
     mov menuCursor, 0
     
-MENU_LOOP:
-    ; 清空畫面
+    ; 首次繪製完整選單
     call Clrscr
     
     ; 顯示選單標題
@@ -358,64 +358,25 @@ MENU_LOOP:
     mov edx, OFFSET menuTitle
     call WriteString
     
-    ; 顯示選項 1 (Continue)
-    mov dh, 10
-    mov dl, 25
-    call Gotoxy
-    movzx eax, menuCursor
-    cmp eax, 0
-    jne SKIP_ARROW1
-    mov edx, OFFSET menuArrow
-    call WriteString
-SKIP_ARROW1:
+    ; 顯示所有選項
     mov dh, 10
     mov dl, 28
     call Gotoxy
     mov edx, OFFSET menuOption1
     call WriteString
     
-    ; 顯示選項 2 (Restart)
-    mov dh, 11
-    mov dl, 25
-    call Gotoxy
-    movzx eax, menuCursor
-    cmp eax, 1
-    jne SKIP_ARROW2
-    mov edx, OFFSET menuArrow
-    call WriteString
-SKIP_ARROW2:
     mov dh, 11
     mov dl, 28
     call Gotoxy
     mov edx, OFFSET menuOption2
     call WriteString
     
-    ; 顯示選項 3 (How to Play)
-    mov dh, 12
-    mov dl, 25
-    call Gotoxy
-    movzx eax, menuCursor
-    cmp eax, 2
-    jne SKIP_ARROW3
-    mov edx, OFFSET menuArrow
-    call WriteString
-SKIP_ARROW3:
     mov dh, 12
     mov dl, 28
     call Gotoxy
     mov edx, OFFSET menuOption3
     call WriteString
     
-    ; 顯示選項 4 (End Game)
-    mov dh, 13
-    mov dl, 25
-    call Gotoxy
-    movzx eax, menuCursor
-    cmp eax, 3
-    jne SKIP_ARROW4
-    mov edx, OFFSET menuArrow
-    call WriteString
-SKIP_ARROW4:
     mov dh, 13
     mov dl, 28
     call Gotoxy
@@ -429,11 +390,28 @@ SKIP_ARROW4:
     mov edx, OFFSET menuPrompt
     call WriteString
     
-    ; 等待使用者輸入
+    ; 顯示初始箭頭（第一個選項）
+    mov dh, 10
+    mov dl, 25
+    call Gotoxy
+    mov edx, OFFSET menuArrow
+    call WriteString
+    
+MENU_WAIT_INPUT:
+    ; 等待使用者輸入（使用 ReadChar 會阻塞直到有按鍵）
+    mov eax, 50
+    call Delay
+    
     call ReadKey
-    jz MENU_LOOP
+    jz MENU_WAIT_INPUT
+    
+    ; 儲存按鍵碼和舊的游標位置
+    mov keyCode, ax
+    movzx eax, menuCursor
+    mov oldCursor, al
     
     ; 檢查上箭頭 (擴展鍵碼 4800h)
+    mov ax, keyCode
     cmp ax, 4800h
     je MENU_UP
     
@@ -449,23 +427,50 @@ SKIP_ARROW4:
     cmp ax, 011Bh
     je MENU_CANCEL
     
-    jmp MENU_LOOP
+    jmp MENU_WAIT_INPUT
     
 MENU_UP:
     ; 向上移動游標
     movzx eax, menuCursor
     cmp eax, 0
-    je MENU_LOOP  ; 已經在最上面
+    je MENU_WAIT_INPUT  ; 已經在最上面
     dec menuCursor
-    jmp MENU_LOOP
+    
+    ; 清空鍵盤緩衝區
+    call FlushKeyBuffer
+    jmp UPDATE_CURSOR
     
 MENU_DOWN:
     ; 向下移動游標
     movzx eax, menuCursor
     cmp eax, MENU_OPTION_COUNT - 1
-    jge MENU_LOOP  ; 已經在最下面
+    jge MENU_WAIT_INPUT  ; 已經在最下面
     inc menuCursor
-    jmp MENU_LOOP
+    
+    ; 清空鍵盤緩衝區
+    call FlushKeyBuffer
+    jmp UPDATE_CURSOR
+    
+UPDATE_CURSOR:
+    ; 清除舊的箭頭
+    movzx eax, oldCursor
+    add al, 10  ; 計算 Y 座標 (10, 11, 12, 13)
+    mov dh, al
+    mov dl, 25
+    call Gotoxy
+    mov edx, OFFSET twoSpaces
+    call WriteString
+    
+    ; 顯示新的箭頭
+    movzx eax, menuCursor
+    add al, 10  ; 計算 Y 座標
+    mov dh, al
+    mov dl, 25
+    call Gotoxy
+    mov edx, OFFSET menuArrow
+    call WriteString
+    
+    jmp MENU_WAIT_INPUT
     
 MENU_SELECT:
     ; 根據游標位置執行對應動作
@@ -480,6 +485,16 @@ MENU_CANCEL:
 MENU_EXIT:
     ret
 showEscMenu ENDP
+
+; =================================================================================
+; 清空鍵盤緩衝區
+; =================================================================================
+FlushKeyBuffer PROC
+FLUSH_LOOP:
+    call ReadKey
+    jnz FLUSH_LOOP  ; 如果有按鍵就繼續清除
+    ret
+FlushKeyBuffer ENDP
 
 ; =================================================================================
 ; 顯示使用說明
