@@ -164,7 +164,7 @@ towersType      BYTE towerMax DUP(?)
 towerCount      DWORD 0               
 
 ; [修正 2] 新增缺失的變數定義
-startWave       DWORD 0       ; 用於控制是否開始生怪
+startWave       DWORD 2       ; 用於控制是否開始生怪(0:生怪中/1:觸發生怪/2.生怪完畢,待下一波生怪)
 cur_round       DWORD 1       ; 當前回合數
 
 ; 狀態控制

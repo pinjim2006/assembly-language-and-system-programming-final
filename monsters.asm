@@ -538,17 +538,14 @@ check:
     jmp monArrive
 
 monDead:
+	;待新增擊殺報酬
     mov (Monster_status PTR [edi]).Speed, 0     
-    jmp nextM
+    jmp nextMon
 
 monArrive:
+	;待新增怪物抵達終點懲罰
     mov (Monster_status PTR [edi]).Speed, 0
 
-nextM:
-    inc ebx
-    cmp ebx, 10
-    jb check
-    
 nextMon:            
     inc ebx
     cmp ebx, 10
@@ -556,3 +553,4 @@ nextMon:
     
     ret
 removeMonsters ENDP
+
