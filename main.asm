@@ -5,6 +5,8 @@ INCLUDE Irvine32.inc
 ; 函式原型宣告
 ; =================================================================================
 showStartScreen PROTO       
+showEscMenu PROTO
+showHowToPlay PROTO
 initConsoleWindow PROTO     
 outerBox PROTO
 initBlock PROTO
@@ -83,9 +85,15 @@ SIDE_MENU_SPACING   = 5
 TOWER_MENU_COUNT    EQU 5
 
 ; 動畫速度
-DASH_SPEED          EQU 5        
+DASH_SPEED          EQU 5
+
+; 選單設定
+MENU_OPTION_COUNT   EQU 4
 
 .data
+
+; 選單游標位置 (0-3)
+menuCursor          BYTE 0
 ; =================================================================================
 ; 介面資料
 ; =================================================================================
@@ -177,6 +185,24 @@ startTitle4     BYTE "  | | (_) \ V  V /  __/ |   | |_| |  __/  _|  __/ | | \__ 
 startTitle5     BYTE "  |_|\___/ \_/\_/ \___|_|   |____/ \___|_|  \___|_| |_|___/\___|", 0
 startTitle6     BYTE "                                                                 ", 0
 startPrompt     BYTE "                Press ENTER to start...", 0
+
+; ESC 選單文字
+menuTitle       BYTE "========== MENU ==========", 0
+menuOption1     BYTE "   Continue", 0
+menuOption2     BYTE "   Restart", 0
+menuOption3     BYTE "   How to Play", 0
+menuOption4     BYTE "   End Game", 0
+menuArrow       BYTE ">>", 0
+menuPrompt      BYTE "Use Arrow Keys to select, ENTER to confirm", 0
+
+; 使用說明文字
+helpTitle       BYTE "========== HOW TO PLAY ==========", 0
+helpLine1       BYTE "Arrow Keys: Move cursor", 0
+helpLine2       BYTE "A/B/C/D/E: Place tower (type A-E)", 0
+helpLine3       BYTE "X: Delete tower", 0
+helpLine4       BYTE "ESC: Open menu", 0
+helpLine5       BYTE "Towers can only be placed on empty tiles", 0
+helpPrompt      BYTE "Press any key to continue...", 0
 
 ; 地圖資料
 mapData BYTE (MAP_WIDTH * MAP_HEIGHT) DUP(0)
@@ -313,6 +339,208 @@ WAIT_ENTER:
     
     ret
 showStartScreen ENDP
+
+; =================================================================================
+; 顯示 ESC 選單
+; =================================================================================
+showEscMenu PROC USES ebx ecx edx
+    ; 初始化游標位置為第一個選項
+    mov menuCursor, 0
+    
+MENU_LOOP:
+    ; 清空畫面
+    call Clrscr
+    
+    ; 顯示選單標題
+    mov dh, 8
+    mov dl, 27
+    call Gotoxy
+    mov edx, OFFSET menuTitle
+    call WriteString
+    
+    ; 顯示選項 1 (Continue)
+    mov dh, 10
+    mov dl, 25
+    call Gotoxy
+    movzx eax, menuCursor
+    cmp eax, 0
+    jne SKIP_ARROW1
+    mov edx, OFFSET menuArrow
+    call WriteString
+SKIP_ARROW1:
+    mov dh, 10
+    mov dl, 28
+    call Gotoxy
+    mov edx, OFFSET menuOption1
+    call WriteString
+    
+    ; 顯示選項 2 (Restart)
+    mov dh, 11
+    mov dl, 25
+    call Gotoxy
+    movzx eax, menuCursor
+    cmp eax, 1
+    jne SKIP_ARROW2
+    mov edx, OFFSET menuArrow
+    call WriteString
+SKIP_ARROW2:
+    mov dh, 11
+    mov dl, 28
+    call Gotoxy
+    mov edx, OFFSET menuOption2
+    call WriteString
+    
+    ; 顯示選項 3 (How to Play)
+    mov dh, 12
+    mov dl, 25
+    call Gotoxy
+    movzx eax, menuCursor
+    cmp eax, 2
+    jne SKIP_ARROW3
+    mov edx, OFFSET menuArrow
+    call WriteString
+SKIP_ARROW3:
+    mov dh, 12
+    mov dl, 28
+    call Gotoxy
+    mov edx, OFFSET menuOption3
+    call WriteString
+    
+    ; 顯示選項 4 (End Game)
+    mov dh, 13
+    mov dl, 25
+    call Gotoxy
+    movzx eax, menuCursor
+    cmp eax, 3
+    jne SKIP_ARROW4
+    mov edx, OFFSET menuArrow
+    call WriteString
+SKIP_ARROW4:
+    mov dh, 13
+    mov dl, 28
+    call Gotoxy
+    mov edx, OFFSET menuOption4
+    call WriteString
+    
+    ; 顯示提示
+    mov dh, 15
+    mov dl, 18
+    call Gotoxy
+    mov edx, OFFSET menuPrompt
+    call WriteString
+    
+    ; 等待使用者輸入
+    call ReadKey
+    jz MENU_LOOP
+    
+    ; 檢查上箭頭 (擴展鍵碼 4800h)
+    cmp ax, 4800h
+    je MENU_UP
+    
+    ; 檢查下箭頭 (擴展鍵碼 5000h)
+    cmp ax, 5000h
+    je MENU_DOWN
+    
+    ; 檢查 ENTER 鍵 (ASCII 13)
+    cmp al, 13
+    je MENU_SELECT
+    
+    ; 檢查 ESC 鍵 (返回遊戲)
+    cmp ax, 011Bh
+    je MENU_CANCEL
+    
+    jmp MENU_LOOP
+    
+MENU_UP:
+    ; 向上移動游標
+    movzx eax, menuCursor
+    cmp eax, 0
+    je MENU_LOOP  ; 已經在最上面
+    dec menuCursor
+    jmp MENU_LOOP
+    
+MENU_DOWN:
+    ; 向下移動游標
+    movzx eax, menuCursor
+    cmp eax, MENU_OPTION_COUNT - 1
+    jge MENU_LOOP  ; 已經在最下面
+    inc menuCursor
+    jmp MENU_LOOP
+    
+MENU_SELECT:
+    ; 根據游標位置執行對應動作
+    movzx eax, menuCursor
+    inc eax  ; 返回 1-4
+    jmp MENU_EXIT
+    
+MENU_CANCEL:
+    ; ESC 鍵返回遊戲
+    mov eax, 1  ; Continue
+    
+MENU_EXIT:
+    ret
+showEscMenu ENDP
+
+; =================================================================================
+; 顯示使用說明
+; =================================================================================
+showHowToPlay PROC USES edx
+    call Clrscr
+    
+    ; 顯示標題
+    mov dh, 6
+    mov dl, 24
+    call Gotoxy
+    mov edx, OFFSET helpTitle
+    call WriteString
+    
+    ; 顯示說明行 1
+    mov dh, 8
+    mov dl, 20
+    call Gotoxy
+    mov edx, OFFSET helpLine1
+    call WriteString
+    
+    ; 顯示說明行 2
+    mov dh, 9
+    mov dl, 20
+    call Gotoxy
+    mov edx, OFFSET helpLine2
+    call WriteString
+    
+    ; 顯示說明行 3
+    mov dh, 10
+    mov dl, 20
+    call Gotoxy
+    mov edx, OFFSET helpLine3
+    call WriteString
+    
+    ; 顯示說明行 4
+    mov dh, 11
+    mov dl, 20
+    call Gotoxy
+    mov edx, OFFSET helpLine4
+    call WriteString
+    
+    ; 顯示說明行 5
+    mov dh, 12
+    mov dl, 20
+    call Gotoxy
+    mov edx, OFFSET helpLine5
+    call WriteString
+    
+    ; 顯示提示
+    mov dh, 15
+    mov dl, 22
+    call Gotoxy
+    mov edx, OFFSET helpPrompt
+    call WriteString
+    
+    ; 等待任意鍵
+    call ReadChar
+    
+    ret
+showHowToPlay ENDP
 
 ; =================================================================================
 ; 繪製常駐側邊選單 (常駐狀態只畫圖)
@@ -872,8 +1100,37 @@ HANDLE_MENU_INPUT_LABEL:
 NO_KEY_PRESSED:
 END_INPUT_CHECK:
 
-    .IF ax == 011Bh ; ESC 鍵退出
-        jmp EXIT_MOVE
+    .IF ax == 011Bh ; ESC 鍵開啟選單
+        call showEscMenu
+        
+        .IF eax == 1  ; Continue - 返回遊戲
+            ; 重繪遊戲畫面
+            INVOKE SetConsoleTextAttribute, outputHandle, 0F0h 
+            call Clrscr
+            call outerBox
+            call drawMapComponents
+            call drawAllTowers
+            call drawSideMenu
+        .ELSEIF eax == 2  ; Restart - 重新開始
+            ; 清空塔資料並重繪
+            mov towerCount, 0
+            INVOKE SetConsoleTextAttribute, outputHandle, 0F0h 
+            call Clrscr
+            call outerBox
+            call drawMapComponents
+            call drawSideMenu
+        .ELSEIF eax == 3  ; How to Play - 顯示說明
+            call showHowToPlay
+            ; 顯示完說明後重繪遊戲畫面
+            INVOKE SetConsoleTextAttribute, outputHandle, 0F0h 
+            call Clrscr
+            call outerBox
+            call drawMapComponents
+            call drawAllTowers
+            call drawSideMenu
+        .ELSEIF eax == 4  ; End Game - 結束遊戲
+            jmp EXIT_MOVE
+        .ENDIF
     .ENDIF
 
     jmp START_MOVE
