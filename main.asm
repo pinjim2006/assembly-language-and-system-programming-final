@@ -164,7 +164,7 @@ towersType      BYTE towerMax DUP(?)
 towerCount      DWORD 0               
 
 ; [修正 2] 新增缺失的變數定義
-startWave       DWORD 2       ; 用於控制是否開始生怪(0:生怪中/1:觸發生怪/2.生怪完畢,待下一波生怪)
+startWave       DWORD 2       ; 用於控制是否開始生怪(0:回合進行中/1:觸發生怪/2.回合結束,待下一波生怪)
 cur_round       DWORD 1       ; 當前回合數
 
 ; 狀態控制
@@ -1098,10 +1098,13 @@ AFTER_DRAW:
     invoke createMonsters, cur_round      
     mov startWave, 0         ; 避免無限生怪
 SKIP_SPAWN:
-
+	cmp startWave, 0
+	jne SKIP_DRAW_MON
     call updateMonstersPositions      ; 更新怪位置
     call removeMonsters  	 ; 移除怪
     call drawMonsters        ; 畫出怪
+
+SKIP_DRAW_MON:	
 	
     mov eax, 50                 ; 延遲控制 Frame Rate
     call Delay
