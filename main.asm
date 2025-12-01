@@ -199,10 +199,11 @@ menuPrompt      BYTE "Use Arrow Keys to select, ENTER to confirm", 0
 ; 使用說明文字
 helpTitle       BYTE "========== HOW TO PLAY ==========", 0
 helpLine1       BYTE "Arrow Keys: Move cursor", 0
-helpLine2       BYTE "A/B/C/D/E: Place tower (type A-E)", 0
-helpLine3       BYTE "X: Delete tower", 0
-helpLine4       BYTE "ESC: Open menu", 0
-helpLine5       BYTE "Towers can only be placed on empty tiles", 0
+helpLine2       BYTE "F: Select tower (use up and down arrow keys)", 0
+helpLine3       BYTE "ENTER: Build tower", 0
+helpLine4       BYTE "X: Delete tower", 0
+helpLine5       BYTE "ESC: Open menu", 0
+helpLine6       BYTE "Towers can only be placed on empty tiles", 0
 helpPrompt      BYTE "Press any key to continue...", 0
 
 ; 地圖資料
@@ -543,6 +544,15 @@ showHowToPlay PROC USES edx
     call Gotoxy
     mov edx, OFFSET helpLine5
     call WriteString
+
+    ; 顯示說明行 6
+    mov dh, 13
+    mov dl, 20
+    call Gotoxy
+    mov edx, OFFSET helpLine6
+    call WriteString
+
+    ; TODO:
     
     ; 顯示提示
     mov dh, 15
