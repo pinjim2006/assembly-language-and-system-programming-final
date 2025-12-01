@@ -4,6 +4,7 @@ INCLUDE Irvine32.inc
 ; =================================================================================
 ; 函式原型宣告
 ; =================================================================================
+showStartScreen PROTO       
 initConsoleWindow PROTO     
 outerBox PROTO
 initBlock PROTO
@@ -168,6 +169,15 @@ dashAnimState   DWORD 0
 dashStyle1      BYTE '-', ' ', '-', ' ', '-', ' ', ' ', '-', ' ', '-', ' ', '-'   
 dashStyle2      BYTE ' ', '-', ' ', '-', ' ', '|', '|', ' ', '-', ' ', '-', ' '   
 
+; 開始畫面文字
+startTitle1     BYTE " _____                       ____       __                    ", 0
+startTitle2     BYTE "|_   _|____      _____ _ __ |  _ \  ___|  | ___ _ __  ___  ___ ", 0
+startTitle3     BYTE "  | |/ _ \ \ /\ / / _ \ '__|| | | |/ _ \ |_ / _ \ '_ \/ __|/ _ \", 0
+startTitle4     BYTE "  | | (_) \ V  V /  __/ |   | |_| |  __/  _|  __/ | | \__ \  __/", 0
+startTitle5     BYTE "  |_|\___/ \_/\_/ \___|_|   |____/ \___|_|  \___|_| |_|___/\___|", 0
+startTitle6     BYTE "                                                                 ", 0
+startPrompt     BYTE "                Press ENTER to start...", 0
+
 ; 地圖資料
 mapData BYTE (MAP_WIDTH * MAP_HEIGHT) DUP(0)
 map1Data BYTE 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
@@ -205,6 +215,9 @@ main PROC
 
     INVOKE SetConsoleTextAttribute, outputHandle, 0F0h 
     call Clrscr 
+    
+    ; 顯示開始畫面
+    call showStartScreen
 
     call outerBox       
     call initMapSystem  
@@ -228,6 +241,78 @@ initConsoleWindow PROC
     INVOKE SetConsoleWindowInfo, outputHandle, TRUE, ADDR windowRect
     ret
 initConsoleWindow ENDP
+
+; =================================================================================
+; 顯示開始畫面並等待 ENTER 鍵
+; =================================================================================
+showStartScreen PROC USES edx
+    
+    ; 清空畫面
+    call Clrscr
+    
+    ; 顯示標題第一行
+    mov dh, 8
+    mov dl, 10
+    call Gotoxy
+    mov edx, OFFSET startTitle1
+    call WriteString
+    
+    ; 顯示標題第二行
+    mov dh, 9
+    mov dl, 10
+    call Gotoxy
+    mov edx, OFFSET startTitle2
+    call WriteString
+    
+    ; 顯示標題第三行
+    mov dh, 10
+    mov dl, 10
+    call Gotoxy
+    mov edx, OFFSET startTitle3
+    call WriteString
+    
+    ; 顯示標題第四行
+    mov dh, 11
+    mov dl, 10
+    call Gotoxy
+    mov edx, OFFSET startTitle4
+    call WriteString
+    
+    ; 顯示標題第五行
+    mov dh, 12
+    mov dl, 10
+    call Gotoxy
+    mov edx, OFFSET startTitle5
+    call WriteString
+    
+    ; 顯示標題第六行
+    mov dh, 13
+    mov dl, 10
+    call Gotoxy
+    mov edx, OFFSET startTitle6
+    call WriteString
+    
+    ; 空兩行後顯示提示訊息
+    mov dh, 16
+    mov dl, 22
+    call Gotoxy
+    mov edx, OFFSET startPrompt
+    call WriteString
+    call Gotoxy
+    mov edx, OFFSET startPrompt
+    call WriteString
+    
+    ; 等待使用者按下 ENTER 鍵
+WAIT_ENTER:
+    call ReadChar
+    cmp al, 13  ; 13 = ENTER 鍵的 ASCII 碼
+    jne WAIT_ENTER
+    
+    ; 清空畫面準備進入遊戲
+    call Clrscr
+    
+    ret
+showStartScreen ENDP
 
 ; =================================================================================
 ; 繪製常駐側邊選單 (常駐狀態只畫圖)
@@ -1282,7 +1367,7 @@ drawDTower ENDP
 
 ; Tower E: 導彈 (missile) 
 drawETower PROC USES esi
-mov esi, OFFSET attrTowerC
+    mov esi, OFFSET attrTowerC
     ; Row 1:   ^   (Tip)
     INVOKE WriteConsoleOutputAttribute, outputHandle, esi, blockWidth, outerBoxPos, ADDR cellsWritten
     mov tempBuffer, 20h     ; ' '
