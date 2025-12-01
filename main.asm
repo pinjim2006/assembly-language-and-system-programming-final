@@ -1,5 +1,5 @@
 INCLUDE Irvine32.inc
-;INCLUDE monsters.asm 為了讓 monsters.asm 能讀取到 main.asm 裡的常數（如 MAP_WIDTH）與變數（如 outputHandle），故將INCLUDE monsters.asm 移到最後面（在 END main 之前）。
+;INCLUDE monsters.asm 為了讓 monsters.asm 能讀取到 main.asm 裡的常數，故將 INCLUDE 移到最後面。
 
 ; =================================================================================
 ; 函式原型宣告
@@ -40,7 +40,6 @@ drawAllTowers PROTO
 restoreGraphicsAtPos PROTO
 getTowerTypeAtPos PROTO
 
-; [修正 1] 新增怪物相關的原型宣告 (INVOKE 需要 PROTO)
 createMonsters PROTO :DWORD
 updateMonstersPositions PROTO
 removeMonsters PROTO
@@ -138,7 +137,7 @@ attrTowerC      WORD blockWidth DUP(0F0h)
 attrTowerD      WORD blockWidth DUP(0F0h) 
 attrTowerE      WORD blockWidth DUP(0F0h) 
 
-; 塔的名稱字串 (補齊長度以便清除)
+; 塔的名稱字串
 strNameA        BYTE "Cannon ", 0
 strNameB        BYTE "Sniper ", 0
 strNameC        BYTE "Ice    ", 0  
@@ -163,9 +162,12 @@ towersPosY      WORD towerMax DUP(?)
 towersType      BYTE towerMax DUP(?)  
 towerCount      DWORD 0               
 
-; [修正 2] 新增缺失的變數定義
-startWave       DWORD 2       ; 用於控制是否開始生怪(0:回合進行中/1:觸發生怪/2.回合結束,待下一波生怪)
-cur_round       DWORD 1       ; 當前回合數
+; [修正 2] 狀態變數
+; 0: 等待下一波
+; 1: 觸發生成 (瞬間狀態)
+; 2: 戰鬥進行中 (怪物移動中)
+startWave       DWORD 0       
+cur_round       DWORD 1       
 
 ; 狀態控制
 menuState           DWORD 0  
@@ -274,68 +276,47 @@ initConsoleWindow ENDP
 ; 顯示開始畫面並等待 ENTER 鍵
 ; =================================================================================
 showStartScreen PROC USES edx
-    
-    ; 清空畫面
     call Clrscr
-    
-    ; 顯示標題第一行
     mov dh, 8
     mov dl, 10
     call Gotoxy
     mov edx, OFFSET startTitle1
     call WriteString
-    
-    ; 顯示標題第二行
     mov dh, 9
     mov dl, 10
     call Gotoxy
     mov edx, OFFSET startTitle2
     call WriteString
-    
-    ; 顯示標題第三行
     mov dh, 10
     mov dl, 10
     call Gotoxy
     mov edx, OFFSET startTitle3
     call WriteString
-    
-    ; 顯示標題第四行
     mov dh, 11
     mov dl, 10
     call Gotoxy
     mov edx, OFFSET startTitle4
     call WriteString
-    
-    ; 顯示標題第五行
     mov dh, 12
     mov dl, 10
     call Gotoxy
     mov edx, OFFSET startTitle5
     call WriteString
-    
-    ; 顯示標題第六行
     mov dh, 13
     mov dl, 10
     call Gotoxy
     mov edx, OFFSET startTitle6
     call WriteString
-    
-    ; 空兩行後顯示提示訊息
     mov dh, 16
     mov dl, 22
     call Gotoxy
     mov edx, OFFSET startPrompt
     call WriteString
-    
-    ; 等待使用者按下 ENTER 鍵
 WAIT_ENTER:
     call ReadChar
-    cmp al, 13  ; 13 = ENTER 鍵的 ASCII 碼
+    cmp al, 13  
     jne WAIT_ENTER
-    
-    ; 清空畫面準備進入遊戲
     call Clrscr
-    
     ret
 showStartScreen ENDP
 
@@ -346,52 +327,39 @@ showEscMenu PROC USES ebx ecx edx
     LOCAL oldCursor:BYTE
     LOCAL keyCode:WORD
     
-    ; 初始化游標位置為第一個選項
     mov menuCursor, 0
-    
-    ; 首次繪製完整選單
     call Clrscr
     
-    ; 顯示選單標題
     mov dh, 8
     mov dl, 27
     call Gotoxy
     mov edx, OFFSET menuTitle
     call WriteString
-    
-    ; 顯示所有選項
     mov dh, 10
     mov dl, 28
     call Gotoxy
     mov edx, OFFSET menuOption1
     call WriteString
-    
     mov dh, 11
     mov dl, 28
     call Gotoxy
     mov edx, OFFSET menuOption2
     call WriteString
-    
     mov dh, 12
     mov dl, 28
     call Gotoxy
     mov edx, OFFSET menuOption3
     call WriteString
-    
     mov dh, 13
     mov dl, 28
     call Gotoxy
     mov edx, OFFSET menuOption4
     call WriteString
-    
-    ; 顯示提示
     mov dh, 15
     mov dl, 18
     call Gotoxy
     mov edx, OFFSET menuPrompt
     call WriteString
-    
-    ; 顯示初始箭頭（第一個選項）
     mov dh, 10
     mov dl, 25
     call Gotoxy
@@ -399,171 +367,121 @@ showEscMenu PROC USES ebx ecx edx
     call WriteString
     
 MENU_WAIT_INPUT:
-    ; 等待使用者輸入（使用 ReadChar 會阻塞直到有按鍵）
     mov eax, 50
     call Delay
-    
     call ReadKey
     jz MENU_WAIT_INPUT
     
-    ; 儲存按鍵碼和舊的游標位置
     mov keyCode, ax
     movzx eax, menuCursor
     mov oldCursor, al
     
-    ; 檢查上箭頭 (擴展鍵碼 4800h)
     mov ax, keyCode
     cmp ax, 4800h
     je MENU_UP
-    
-    ; 檢查下箭頭 (擴展鍵碼 5000h)
     cmp ax, 5000h
     je MENU_DOWN
-    
-    ; 檢查 ENTER 鍵 (ASCII 13)
     cmp al, 13
     je MENU_SELECT
-    
-    ; 檢查 ESC 鍵 (返回遊戲)
     cmp ax, 011Bh
     je MENU_CANCEL
-    
     jmp MENU_WAIT_INPUT
     
 MENU_UP:
-    ; 向上移動游標
     movzx eax, menuCursor
     cmp eax, 0
-    je MENU_WAIT_INPUT  ; 已經在最上面
+    je MENU_WAIT_INPUT  
     dec menuCursor
-    
-    ; 清空鍵盤緩衝區
     call FlushKeyBuffer
     jmp UPDATE_CURSOR
     
 MENU_DOWN:
-    ; 向下移動游標
     movzx eax, menuCursor
     cmp eax, MENU_OPTION_COUNT - 1
-    jge MENU_WAIT_INPUT  ; 已經在最下面
+    jge MENU_WAIT_INPUT  
     inc menuCursor
-    
-    ; 清空鍵盤緩衝區
     call FlushKeyBuffer
     jmp UPDATE_CURSOR
     
 UPDATE_CURSOR:
-    ; 清除舊的箭頭
     movzx eax, oldCursor
-    add al, 10  ; 計算 Y 座標 (10, 11, 12, 13)
+    add al, 10 
     mov dh, al
     mov dl, 25
     call Gotoxy
     mov edx, OFFSET twoSpaces
     call WriteString
-    
-    ; 顯示新的箭頭
     movzx eax, menuCursor
-    add al, 10  ; 計算 Y 座標
+    add al, 10 
     mov dh, al
     mov dl, 25
     call Gotoxy
     mov edx, OFFSET menuArrow
     call WriteString
-    
     jmp MENU_WAIT_INPUT
     
 MENU_SELECT:
-    ; 根據游標位置執行對應動作
     movzx eax, menuCursor
-    inc eax  ; 返回 1-4
+    inc eax  
     jmp MENU_EXIT
     
 MENU_CANCEL:
-    ; ESC 鍵返回遊戲
-    mov eax, 1  ; Continue
+    mov eax, 1  
     
 MENU_EXIT:
     ret
 showEscMenu ENDP
 
-; =================================================================================
-; 清空鍵盤緩衝區
-; =================================================================================
 FlushKeyBuffer PROC
 FLUSH_LOOP:
     call ReadKey
-    jnz FLUSH_LOOP  ; 如果有按鍵就繼續清除
+    jnz FLUSH_LOOP 
     ret
 FlushKeyBuffer ENDP
 
-; =================================================================================
-; 顯示使用說明
-; =================================================================================
 showHowToPlay PROC USES edx
     call Clrscr
-    
-    ; 顯示標題
     mov dh, 6
     mov dl, 24
     call Gotoxy
     mov edx, OFFSET helpTitle
     call WriteString
-    
-    ; 顯示說明行 1
     mov dh, 8
     mov dl, 20
     call Gotoxy
     mov edx, OFFSET helpLine1
     call WriteString
-    
-    ; 顯示說明行 2
     mov dh, 9
     mov dl, 20
     call Gotoxy
     mov edx, OFFSET helpLine2
     call WriteString
-    
-    ; 顯示說明行 3
     mov dh, 10
     mov dl, 20
     call Gotoxy
     mov edx, OFFSET helpLine3
     call WriteString
-    
-    ; 顯示說明行 4
     mov dh, 11
     mov dl, 20
     call Gotoxy
     mov edx, OFFSET helpLine4
     call WriteString
-    
-    ; 顯示說明行 5
     mov dh, 12
     mov dl, 20
     call Gotoxy
     mov edx, OFFSET helpLine5
     call WriteString
-
-    ; 顯示說明行 6
     mov dh, 13
     mov dl, 20
     call Gotoxy
     mov edx, OFFSET helpLine6
     call WriteString
-
-    ; TODO:
-    
-    ; 顯示提示
     mov dh, 15
     mov dl, 22
     call Gotoxy
     mov edx, OFFSET helpPrompt
     call WriteString
-    
-    ; 等待任意鍵
     call ReadChar
-    
     ret
 showHowToPlay ENDP
 
@@ -572,21 +490,16 @@ showHowToPlay ENDP
 ; =================================================================================
 drawSideMenu PROC USES eax ecx esi
     push DWORD PTR outerBoxPos
-    
     mov ecx, 0
 DRAW_MENU_LOOP:
     cmp ecx, TOWER_MENU_COUNT
     jge DRAW_MENU_FINISH
-    
-    ; 計算位置: Y = START_Y + (i * SPACING)
     mov eax, ecx
     imul eax, SIDE_MENU_SPACING
     add eax, SIDE_MENU_Y
     mov outerBoxPos.Y, ax
     mov outerBoxPos.X, SIDE_MENU_X
-    
     push ecx
-    
     cmp ecx, 0
     je D_A
     cmp ecx, 1
@@ -598,7 +511,6 @@ DRAW_MENU_LOOP:
     cmp ecx, 4
     je D_E
     jmp D_NEXT
-    
 D_A: call drawATower
      jmp D_NEXT
 D_B: call drawBTower
@@ -608,39 +520,27 @@ D_C: call drawCTower
 D_D: call drawDTower
      jmp D_NEXT
 D_E: call drawETower
-
 D_NEXT:
     pop ecx
     inc ecx
     jmp DRAW_MENU_LOOP
-
 DRAW_MENU_FINISH:
     pop DWORD PTR outerBoxPos
     ret
 drawSideMenu ENDP
 
-; =================================================================================
-; 繪製側邊選單游標 + 顯示對應塔名稱
-; =================================================================================
 drawSideMenuCursor PROC USES eax
     mov eax, sideMenuCursorIndex
     imul eax, SIDE_MENU_SPACING
     add eax, SIDE_MENU_Y
-    add eax, 1                  ; 對齊塔的中間
-    
+    add eax, 1                  
     mov sideMenuCursorPos.Y, ax
     mov ax, SIDE_MENU_X
     add ax, 6                   
     mov sideMenuCursorPos.X, ax
-    
-    ; 1. 畫游標 " << "
     INVOKE WriteConsoleOutputAttribute, outputHandle, ADDR attrMenuCursor, 4, sideMenuCursorPos, ADDR cellsWritten
     INVOKE WriteConsoleOutputCharacter, outputHandle, ADDR menuCursorStr, 4, sideMenuCursorPos, ADDR count
-    
-    ; 2. 游標往右移，準備畫名字
     add sideMenuCursorPos.X, 5
-    
-    ; 3. 根據 sideMenuCursorIndex 決定畫哪個名字
     mov eax, sideMenuCursorIndex
     cmp eax, 0
     je SHOW_NAME_A
@@ -653,7 +553,6 @@ drawSideMenuCursor PROC USES eax
     cmp eax, 4
     je SHOW_NAME_E
     jmp SKIP_NAME
-
 SHOW_NAME_A:
     INVOKE WriteConsoleOutputAttribute, outputHandle, ADDR attrMenuName, 7, sideMenuCursorPos, ADDR cellsWritten
     INVOKE WriteConsoleOutputCharacter, outputHandle, ADDR strNameA, 7, sideMenuCursorPos, ADDR count
@@ -673,72 +572,48 @@ SHOW_NAME_D:
 SHOW_NAME_E:
     INVOKE WriteConsoleOutputAttribute, outputHandle, ADDR attrMenuName, 7, sideMenuCursorPos, ADDR cellsWritten
     INVOKE WriteConsoleOutputCharacter, outputHandle, ADDR strNameE, 7, sideMenuCursorPos, ADDR count
-
 SKIP_NAME:
     ret
 drawSideMenuCursor ENDP
 
-; =================================================================================
-; 清除側邊選單游標 + 清除名稱
-; =================================================================================
 clearSideMenuCursor PROC USES eax
     mov eax, sideMenuCursorIndex
     imul eax, SIDE_MENU_SPACING
     add eax, SIDE_MENU_Y
     add eax, 1
-    
     mov sideMenuCursorPos.Y, ax
     mov ax, SIDE_MENU_X
     add ax, 6
     mov sideMenuCursorPos.X, ax
-    
-    ; 1. 清除游標 " << "
     INVOKE WriteConsoleOutputAttribute, outputHandle, ADDR outerAttributes, 4, sideMenuCursorPos, ADDR cellsWritten
     INVOKE WriteConsoleOutputCharacter, outputHandle, ADDR emptyLine, 4, sideMenuCursorPos, ADDR count
-    
-    ; 2. 游標往右移，準備清除名字
     add sideMenuCursorPos.X, 5
-    
-    ; 3. 清除名字區域 (長度設為 10 確保清乾淨)
     INVOKE WriteConsoleOutputAttribute, outputHandle, ADDR outerAttributes, 10, sideMenuCursorPos, ADDR cellsWritten
     INVOKE WriteConsoleOutputCharacter, outputHandle, ADDR emptyLine, 10, sideMenuCursorPos, ADDR count
-    
     ret
 clearSideMenuCursor ENDP
 
-; =================================================================================
-; 切換 遊戲/選單 模式
-; =================================================================================
 toggleMenuState PROC
     mov eax, menuState
     xor eax, 1
     mov menuState, eax
-    
     cmp eax, 1
     je SWITCH_TO_MENU
-    
     call clearSideMenuCursor
     jmp TOGGLE_DONE
-    
 SWITCH_TO_MENU:
     call drawSideMenuCursor
-    
 TOGGLE_DONE:
     ret
 toggleMenuState ENDP
 
-; =================================================================================
-; 處理側邊選單輸入 (Enter 直接建造)
-; =================================================================================
 handleSideMenuInput PROC USES eax
     cmp ax, 4800h ; UP
     je MENU_UP
     cmp ax, 5000h ; DOWN
     je MENU_DOWN
-    
     cmp ax, 1C0Dh ; ENTER
     je MENU_SELECT
-    
     jmp MENU_INPUT_DONE
 
 MENU_UP:
@@ -774,12 +649,6 @@ MENU_INPUT_DONE:
     ret
 handleSideMenuInput ENDP
 
-; [修正 3] 這裡原本有一個重複的 moveBlock，已刪除。
-; 請直接接續 handleNormalInput
-
-; =================================================================================
-; 處理一般模式輸入
-; =================================================================================
 handleNormalInput PROC USES eax ebx
     cmp ax, 4800h ; UP
     je HANDLE_UP
@@ -834,10 +703,6 @@ HANDLE_X:
 END_NORMAL_INPUT:
     ret
 handleNormalInput ENDP
-
-; =================================================================================
-; 繪圖函式 (使用 F0h 白底屬性)
-; =================================================================================
 
 outerBox PROC USES eax ecx
     mov ax, outerBoxPosInit.X
@@ -1068,58 +933,79 @@ NOT_FOUND:
 getTowerTypeAtPos ENDP
 
 ; =================================================================================
-; 遊戲主迴圈 (Main Loop)
+; 遊戲主迴圈 (Main Loop) - 簡化版 (0=準備, 1=戰鬥)
 ; =================================================================================
 moveBlock PROC
 START_MOVE:
-    call updateDashAnimation    ; 更新動畫狀態
-    
-
+    call updateDashAnimation    
     call restoreGraphicsAtPos
-    call drawMovingDashedCursor ; 畫地圖游標 (始終顯示)
+    call drawMovingDashedCursor 
     mov ax, blockPos.X
     mov prevBlockPos.X, ax
     mov ax, blockPos.Y
     mov prevBlockPos.Y, ax
 
-
-    ; 檢查是否開啟選單
+    ; 檢查是否開啟選單 (選單開啟時暫停其他繪製或覆蓋)
     cmp menuState, 1
     je DRAW_MENU_STATE
     jmp AFTER_DRAW
 
 DRAW_MENU_STATE:
-    ; call drawTowerMenu          ; 這裡你原本註解掉或呼叫不存在的函式，我先註解掉以免報錯，你的 drawSideMenu 已經畫好了
 AFTER_DRAW:
 
-	;怪物指令入口			---------------------------------------------------------	
-    cmp startWave, 1		 ;注意:按下回合開始鍵要把startWave設成1以進入怪物指令入口
-    jne SKIP_SPAWN			;--------------------------------------------------------
-    invoke createMonsters, cur_round      
-    mov startWave, 0         ; 避免無限生怪
-SKIP_SPAWN:
-	cmp startWave, 0
-	jne SKIP_DRAW_MON
-    call updateMonstersPositions      ; 更新怪位置
-    call removeMonsters  	 ; 移除怪
-    call drawMonsters        ; 畫出怪
+    ; =========================================================
+    ; 戰鬥狀態檢查 (State: 1 = 戰鬥中)
+    ; =========================================================
+    cmp startWave, 1          
+    jne SKIP_COMBAT_LOGIC     ; 如果是 0 (準備期)，跳過怪物更新
+    
+    ; --- 戰鬥中邏輯 (每一幀都執行) ---
+    call updateMonstersPositions      
+    call removeMonsters  	 
+    call drawMonsters
+    
+    ; [注意]
+    ; 你需要在 monsters.asm 的 removeMonsters 裡判斷：
+    ; 如果怪物數量 (monsterCount) 歸零，就執行 mov startWave, 0
+    ; 這樣才能自動回到準備期
 
-SKIP_DRAW_MON:	
+SKIP_COMBAT_LOGIC:	
+    ; =========================================================
 	
-    mov eax, 50                 ; 延遲控制 Frame Rate
+    mov eax, 50                 
     call Delay
     
     call ReadKey
     jz NO_KEY_PRESSED
     
-    .IF ax == 2166h ; 'f' 鍵 (開關選單)
-        call toggleMenuState
+    ; ---------------------------------------------------------
+    ; [G鍵] 開始戰鬥 (僅在準備期有效)
+    ; ---------------------------------------------------------
+    .IF (al == 'g') || (al == 'G')
+        .IF (startWave == 0) && (menuState == 0)
+            ; 1. 先生成怪物 (只執行這一次)
+            invoke createMonsters, cur_round
+            
+            ; 2. 切換狀態為 1 (戰鬥開始)
+            mov startWave, 1      
+        .ENDIF
+    .ENDIF
+
+    ; ---------------------------------------------------------
+    ; [F鍵] 開啟選單 (僅在準備期有效)
+    ; ---------------------------------------------------------
+    .IF ax == 2166h ; 'f'
+        ; 只有在 "準備期 (0)" 才允許蓋塔
+        .IF startWave == 0
+            call toggleMenuState
+        .ENDIF
     .ENDIF
 	
     cmp menuState, 1
-    je HANDLE_MENU_INPUT_LABEL        ; 選單模式輸入
+    je HANDLE_MENU_INPUT_LABEL        
     
-    call handleNormalInput      ; 一般模式輸入
+    ; 移動控制 (戰鬥中、準備期皆可移動)
+    call handleNormalInput      
     jmp END_INPUT_CHECK
 
 HANDLE_MENU_INPUT_LABEL:
@@ -1128,35 +1014,33 @@ HANDLE_MENU_INPUT_LABEL:
 NO_KEY_PRESSED:
 END_INPUT_CHECK:
 
-    .IF ax == 011Bh ; ESC 鍵開啟選單
+    .IF ax == 011Bh ; ESC 
         call showEscMenu
         
-        .IF eax == 1  ; Continue - 返回遊戲
-            ; 重繪遊戲畫面
+        .IF eax == 1  ; Continue
             INVOKE SetConsoleTextAttribute, outputHandle, 0F0h 
             call Clrscr
             call outerBox
             call drawMapComponents
             call drawAllTowers
             call drawSideMenu
-        .ELSEIF eax == 2  ; Restart - 重新開始
-            ; 清空塔資料並重繪
+        .ELSEIF eax == 2  ; Restart
             mov towerCount, 0
+            mov startWave, 0      ; 重置回準備期
             INVOKE SetConsoleTextAttribute, outputHandle, 0F0h 
             call Clrscr
             call outerBox
             call drawMapComponents
             call drawSideMenu
-        .ELSEIF eax == 3  ; How to Play - 顯示說明
+        .ELSEIF eax == 3  ; How to Play
             call showHowToPlay
-            ; 顯示完說明後重繪遊戲畫面
             INVOKE SetConsoleTextAttribute, outputHandle, 0F0h 
             call Clrscr
             call outerBox
             call drawMapComponents
             call drawAllTowers
             call drawSideMenu
-        .ELSEIF eax == 4  ; End Game - 結束遊戲
+        .ELSEIF eax == 4  ; End Game
             jmp EXIT_MOVE
         .ENDIF
     .ENDIF
@@ -1335,26 +1219,36 @@ JUST_DECREASE_COUNT_SIMPLE:
     ret
 removeTowerAtIndexSimple ENDP
 
+; [修正] drawTower 現在正確讀取堆疊參數 (Index) 並自行查表取得座標
 drawTower PROC USES eax ebx ecx edi esi
-    mov eax, [esp+24]
+    ; 堆疊結構: [ESP+24] = Tower Index (由 drawAllTowers 的 push ecx 傳入)
+    
+    mov edi, [esp+24]      ; 取得 Index
+
     push DWORD PTR outerBoxPos
+
+    ; 取得 X 座標
     mov esi, OFFSET towersPosX
-    mov ebx, eax
+    mov ebx, edi
     imul ebx, 2
     add esi, ebx
     mov ax, WORD PTR [esi]
     mov outerBoxPos.X, ax
+
+    ; 取得 Y 座標
     mov esi, OFFSET towersPosY
-    mov eax, [esp+28]
-    mov ebx, eax
+    mov ebx, edi
     imul ebx, 2
     add esi, ebx
     mov ax, WORD PTR [esi]
     mov outerBoxPos.Y, ax
+
+    ; 取得 Type 並繪製
     mov esi, OFFSET towersType
-    mov eax, [esp+28]
+    mov eax, edi
     add esi, eax
     mov bl, BYTE PTR [esi]
+    
     cmp bl, 1
     je DRAW_TOWER_A
     cmp bl, 2
@@ -1367,6 +1261,7 @@ drawTower PROC USES eax ebx ecx edi esi
     je DRAW_TOWER_E
     call drawATower
     jmp DRAW_TOWER_DONE
+
 DRAW_TOWER_A: call drawATower
     jmp DRAW_TOWER_DONE
 DRAW_TOWER_B: call drawBTower
@@ -1378,7 +1273,7 @@ DRAW_TOWER_D: call drawDTower
 DRAW_TOWER_E: call drawETower
 DRAW_TOWER_DONE:
     pop DWORD PTR outerBoxPos
-    ret 4
+    ret 4 ; 清除堆疊中的一個參數 (Index)
 drawTower ENDP
 
 initMapSystem PROC USES eax ecx esi edi
@@ -1499,187 +1394,142 @@ calculateScreenPosition ENDP
 ; 各式防禦塔外觀 (精細化 + 白底黑字)
 ; =================================================================================
 
-; Tower A: 加農砲 (Cannon)
-; Visual:
-;  /╧\
-;  |█|
-; ▲###▲
 drawATower PROC USES esi
     mov esi, OFFSET attrTowerA 
-    
-    ; Row 1:  /╧\ 
     INVOKE WriteConsoleOutputAttribute, outputHandle, esi, blockWidth, outerBoxPos, ADDR cellsWritten
-    mov tempBuffer, 20h     ; ' '
-    mov tempBuffer+1, 2Fh   ; '/'
-    mov tempBuffer+2, 0CFh  ; '╧' (上突出的連接座)
-    mov tempBuffer+3, 5Ch   ; '\'
-    mov tempBuffer+4, 20h   ; ' '
+    mov tempBuffer, 20h     
+    mov tempBuffer+1, 2Fh   
+    mov tempBuffer+2, 0CFh  
+    mov tempBuffer+3, 5Ch   
+    mov tempBuffer+4, 20h   
     INVOKE WriteConsoleOutputCharacter, outputHandle, ADDR tempBuffer, blockWidth, outerBoxPos, ADDR count
     inc outerBoxPos.Y
-    
-    ; Row 2: |█|
     INVOKE WriteConsoleOutputAttribute, outputHandle, esi, blockWidth, outerBoxPos, ADDR cellsWritten
-    mov tempBuffer, 20h     ; ' '
-    mov tempBuffer+1, 7Ch   ; '| '
-    mov tempBuffer+2, 0DBh  ; '█' (側半填滿方塊，模擬砲管陰影或開口)
-    mov tempBuffer+3, 7Ch   ; '|'
-    mov tempBuffer+4, 20h   ; ' '
+    mov tempBuffer, 20h     
+    mov tempBuffer+1, 7Ch   
+    mov tempBuffer+2, 0DBh  
+    mov tempBuffer+3, 7Ch   
+    mov tempBuffer+4, 20h   
     INVOKE WriteConsoleOutputCharacter, outputHandle, ADDR tempBuffer, blockWidth, outerBoxPos, ADDR count
     inc outerBoxPos.Y
-    
-    ; Row 3: ▲###▲
     INVOKE WriteConsoleOutputAttribute, outputHandle, esi, blockWidth, outerBoxPos, ADDR cellsWritten
-    mov tempBuffer, 1Eh      ; '▲'
-    mov tempBuffer+1, 23h    ; '#'
-    mov tempBuffer+2, 23h    ; '#'
-    mov tempBuffer+3, 23h    ; '#'
-    mov tempBuffer+4, 1Eh    ; '▲'
+    mov tempBuffer, 1Eh      
+    mov tempBuffer+1, 23h    
+    mov tempBuffer+2, 23h    
+    mov tempBuffer+3, 23h    
+    mov tempBuffer+4, 1Eh    
     INVOKE WriteConsoleOutputCharacter, outputHandle, ADDR tempBuffer, blockWidth, outerBoxPos, ADDR count
-    
     ret
 drawATower ENDP
 
-; Tower B: 狙擊槍 (Sniper) - 簡潔版
-; 造型設計:
-; Row 1: (空)
-; Row 2: ─═╤╞╦  (模擬 ╾━╤デ╦)
-; Row 3:  ▲     (左下角三角形腳架)
 drawBTower PROC USES esi
     mov esi, OFFSET attrTowerB
-
-    ; Row 1: 空白
     INVOKE WriteConsoleOutputAttribute, outputHandle, esi, blockWidth, outerBoxPos, ADDR cellsWritten
-    mov tempBuffer, 20h     ; ' '
-    mov tempBuffer+1, 20h   ; ' '
-    mov tempBuffer+2, 20h   ; ' '
-    mov tempBuffer+3, 20h   ; ' '
-    mov tempBuffer+4, 20h   ; ' '
+    mov tempBuffer, 20h     
+    mov tempBuffer+1, 20h   
+    mov tempBuffer+2, 20h   
+    mov tempBuffer+3, 20h   
+    mov tempBuffer+4, 20h   
     INVOKE WriteConsoleOutputCharacter, outputHandle, ADDR tempBuffer, blockWidth, outerBoxPos, ADDR count
     inc outerBoxPos.Y
-
-    ; Row 2: ─═╤╞╦ (槍身)
     INVOKE WriteConsoleOutputAttribute, outputHandle, esi, blockWidth, outerBoxPos, ADDR cellsWritten
-    mov tempBuffer, 0C4h    ; ─ (槍口)
-    mov tempBuffer+1, 0CDh  ; ═ (槍管)
-    mov tempBuffer+2, 0D1h  ; ╤ (瞄準鏡)
-    mov tempBuffer+3, 0C6h  ; ╞ (槍身)
-    mov tempBuffer+4, 0CBh  ; ╦ (槍托)
+    mov tempBuffer, 0C4h    
+    mov tempBuffer+1, 0CDh  
+    mov tempBuffer+2, 0D1h  
+    mov tempBuffer+3, 0C6h  
+    mov tempBuffer+4, 0CBh  
     INVOKE WriteConsoleOutputCharacter, outputHandle, ADDR tempBuffer, blockWidth, outerBoxPos, ADDR count
     inc outerBoxPos.Y
-
-    ; Row 3:  ▲    (三角形腳架)
     INVOKE WriteConsoleOutputAttribute, outputHandle, esi, blockWidth, outerBoxPos, ADDR cellsWritten
-    mov tempBuffer, 20h     ; ' '
-    mov tempBuffer+1, 5Eh   ; ▲ (實心三角形，位於槍管下方)
-    mov tempBuffer+2, 20h   ; ' '
-    mov tempBuffer+3, 20h   ; ' '
-    mov tempBuffer+4, 20h   ; ' '
+    mov tempBuffer, 20h     
+    mov tempBuffer+1, 5Eh   
+    mov tempBuffer+2, 20h   
+    mov tempBuffer+3, 20h   
+    mov tempBuffer+4, 20h   
     INVOKE WriteConsoleOutputCharacter, outputHandle, ADDR tempBuffer, blockWidth, outerBoxPos, ADDR count
-
     ret
 drawBTower ENDP
 
-
-; Tower C: 寒冰箭 (Ice Arrow)
 drawCTower PROC USES esi
     mov esi, OFFSET attrTowerC
-    
-    ; Row 1:   /) 
     INVOKE WriteConsoleOutputAttribute, outputHandle, esi, blockWidth, outerBoxPos, ADDR cellsWritten
-    mov tempBuffer, 20h     ; ' '
-    mov tempBuffer+1, 2Fh   ; '/ '
-    mov tempBuffer+2, 29h   ; ')'
-    mov tempBuffer+3, 20h   ; ' '
-    mov tempBuffer+4, 20h   ; ' '
+    mov tempBuffer, 20h     
+    mov tempBuffer+1, 2Fh   
+    mov tempBuffer+2, 29h   
+    mov tempBuffer+3, 20h   
+    mov tempBuffer+4, 20h   
     INVOKE WriteConsoleOutputCharacter, outputHandle, ADDR tempBuffer, blockWidth, outerBoxPos, ADDR count
     inc outerBoxPos.Y
-    
-    ; Row 2: <--##
     INVOKE WriteConsoleOutputAttribute, outputHandle, esi, blockWidth, outerBoxPos, ADDR cellsWritten
-    mov tempBuffer, 3Ch     ; '<'
-    mov tempBuffer+1, 2Dh   ; '-'
-    mov tempBuffer+2, 2Dh   ; '-'
-    mov tempBuffer+3, 23h   ; '#'
-    mov tempBuffer+4, 23h   ; '#'
+    mov tempBuffer, 3Ch     
+    mov tempBuffer+1, 2Dh   
+    mov tempBuffer+2, 2Dh   
+    mov tempBuffer+3, 23h   
+    mov tempBuffer+4, 23h   
     INVOKE WriteConsoleOutputCharacter, outputHandle, ADDR tempBuffer, blockWidth, outerBoxPos, ADDR count
     inc outerBoxPos.Y
-    
-    ; Row 3:   \) 
     INVOKE WriteConsoleOutputAttribute, outputHandle, esi, blockWidth, outerBoxPos, ADDR cellsWritten
-    mov tempBuffer, 20h     ; ' '
-    mov tempBuffer+1, 5Ch   ; '\'
-    mov tempBuffer+2, 29h   ; ')'
-    mov tempBuffer+3, 20h   ; ' '
-    mov tempBuffer+4, 20h   ; ' '
+    mov tempBuffer, 20h     
+    mov tempBuffer+1, 5Ch   
+    mov tempBuffer+2, 29h   
+    mov tempBuffer+3, 20h   
+    mov tempBuffer+4, 20h   
     INVOKE WriteConsoleOutputCharacter, outputHandle, ADDR tempBuffer, blockWidth, outerBoxPos, ADDR count
     ret
 drawCTower ENDP
 
-
-; Tower D: 法師塔 (Mage) - 符文
 drawDTower PROC USES esi
     mov esi, OFFSET attrTowerD
-    ; Row 1: 魔法符文
     INVOKE WriteConsoleOutputAttribute, outputHandle, esi, blockWidth, outerBoxPos, ADDR cellsWritten
     mov tempBuffer, 20h
-    mov tempBuffer+1, 0DAh  ; ┌
-    mov tempBuffer+2, 0E8h  ; Φ
-    mov tempBuffer+3, 0BFh  ; ┐
+    mov tempBuffer+1, 0DAh  
+    mov tempBuffer+2, 0E8h  
+    mov tempBuffer+3, 0BFh  
     mov tempBuffer+4, 20h
     INVOKE WriteConsoleOutputCharacter, outputHandle, ADDR tempBuffer, blockWidth, outerBoxPos, ADDR count
     inc outerBoxPos.Y
-    
-    ; Row 2: 懸浮座
     INVOKE WriteConsoleOutputAttribute, outputHandle, esi, blockWidth, outerBoxPos, ADDR cellsWritten
     mov tempBuffer, 20h
-    mov tempBuffer+1, 0C0h  ; └
-    mov tempBuffer+2, 0B3h  ; │
-    mov tempBuffer+3, 0D9h  ; ┘
+    mov tempBuffer+1, 0C0h  
+    mov tempBuffer+2, 0B3h  
+    mov tempBuffer+3, 0D9h  
     mov tempBuffer+4, 20h
     INVOKE WriteConsoleOutputCharacter, outputHandle, ADDR tempBuffer, blockWidth, outerBoxPos, ADDR count
     inc outerBoxPos.Y
-    
-    ; Row 3: 法陣
     INVOKE WriteConsoleOutputAttribute, outputHandle, esi, blockWidth, outerBoxPos, ADDR cellsWritten
     mov tempBuffer, 20h
-    mov tempBuffer+1, 0C4h  ; ─
-    mov tempBuffer+2, 0CAh  ; ╩
-    mov tempBuffer+3, 0C4h  ; ─
+    mov tempBuffer+1, 0C4h  
+    mov tempBuffer+2, 0CAh  
+    mov tempBuffer+3, 0C4h  
     mov tempBuffer+4, 20h
     INVOKE WriteConsoleOutputCharacter, outputHandle, ADDR tempBuffer, blockWidth, outerBoxPos, ADDR count
     ret
 drawDTower ENDP
 
-; Tower E: 導彈 (missile) 
 drawETower PROC USES esi
     mov esi, OFFSET attrTowerC
-    ; Row 1:   ^   (Tip)
     INVOKE WriteConsoleOutputAttribute, outputHandle, esi, blockWidth, outerBoxPos, ADDR cellsWritten
-    mov tempBuffer, 20h     ; ' '
-    mov tempBuffer+1, 20h   ; ' '
-    mov tempBuffer+2, 1Eh   ; '^'
-    mov tempBuffer+3, 20h   ; ' '
-    mov tempBuffer+4, 20h   ; ' '
+    mov tempBuffer, 20h     
+    mov tempBuffer+1, 20h   
+    mov tempBuffer+2, 1Eh   
+    mov tempBuffer+3, 20h   
+    mov tempBuffer+4, 20h   
     INVOKE WriteConsoleOutputCharacter, outputHandle, ADDR tempBuffer, blockWidth, outerBoxPos, ADDR count
     inc outerBoxPos.Y
-    
-    ; Row 2:  |#|  (Shaft)
     INVOKE WriteConsoleOutputAttribute, outputHandle, esi, blockWidth, outerBoxPos, ADDR cellsWritten
-    mov tempBuffer, 20h     ; ' '
-    mov tempBuffer+1, 7Ch   ; '|'
-    mov tempBuffer+2, 23h   ; '#'
-    mov tempBuffer+3, 7Ch   ; '|'
-    mov tempBuffer+4, 20h   ; ' '
+    mov tempBuffer, 20h     
+    mov tempBuffer+1, 7Ch   
+    mov tempBuffer+2, 23h   
+    mov tempBuffer+3, 7Ch   
+    mov tempBuffer+4, 20h   
     INVOKE WriteConsoleOutputCharacter, outputHandle, ADDR tempBuffer, blockWidth, outerBoxPos, ADDR count
     inc outerBoxPos.Y
-    
-    ; Row 3:  /#\  (Base)
     INVOKE WriteConsoleOutputAttribute, outputHandle, esi, blockWidth, outerBoxPos, ADDR cellsWritten
-    mov tempBuffer, 2Fh     ; '/'
-    mov tempBuffer+1, 23h   ; '#'
-    mov tempBuffer+2, 7Ch   ; '|'
-    mov tempBuffer+3, 23h   ; '#'
-    mov tempBuffer+4, 5Ch   ; '\'
+    mov tempBuffer, 2Fh     
+    mov tempBuffer+1, 23h   
+    mov tempBuffer+2, 7Ch   
+    mov tempBuffer+3, 23h   
+    mov tempBuffer+4, 5Ch   
     INVOKE WriteConsoleOutputCharacter, outputHandle, ADDR tempBuffer, blockWidth, outerBoxPos, ADDR count
     ret
 drawETower ENDP
