@@ -11,6 +11,10 @@ INCLUDE Irvine32.inc
 showStartScreen PROTO       ; 顯示遊戲標題畫面
 showEscMenu PROTO           ; 顯示遊戲中暫停選單 (ESC)
 showHowToPlay PROTO         ; 顯示操作說明
+showGameOver PROTO          ; 顯示 Game Over 畫面
+drawBigNumber PROTO :DWORD, :DWORD, :DWORD ; 繪製大數字 (數字, X座標, Y座標)
+drawBigLetter PROTO :DWORD, :DWORD, :DWORD ; 繪製大字母 (字母M/R/L, X座標, Y座標)
+drawGameStats PROTO         ; 繪製遊戲頂部資訊欄 (金錢、生命、回合)
 initConsoleWindow PROTO     ; 初始化視窗大小與緩衝區
 outerBox PROTO              ; 繪製遊戲主外框
 initBlock PROTO             ; 初始化游標位置
@@ -175,6 +179,9 @@ towerCount      DWORD 0               ; 目前已建造的塔數量
 ; startWave: 0 = 準備期 (可蓋塔), 1 = 戰鬥期 (怪物移動)
 startWave       DWORD 0       
 cur_round       DWORD 1       ; 當前波數 (傳給 monsters.asm 用)
+life            DWORD 10      ; 玩家生命值 (測試用，歸零則遊戲結束)
+money           DWORD 50      ; 玩家金錢 (用於建造塔)
+gameOver        DWORD 0       ; 遊戲結束標誌 (0=繼續, 1=結束)
 
 ; menuState: 0 = 游標在地圖上, 1 = 游標在側邊選單 (選塔中)
 menuState           DWORD 0  
@@ -212,9 +219,36 @@ helpLine1       BYTE "Arrow Keys: Move cursor", 0
 helpLine2       BYTE "F: Select tower (use up and down arrow keys)", 0
 helpLine3       BYTE "ENTER: Build tower", 0
 helpLine4       BYTE "X: Delete tower", 0
-helpLine5       BYTE "ESC: Open menu", 0
-helpLine6       BYTE "Towers can only be placed on empty tiles", 0
+helpLine5       BYTE "G: Start round", 0
+helpLine6       BYTE "ESC: Open menu", 0
+helpLine7       BYTE "Towers can only be placed on empty tiles", 0
 helpPrompt      BYTE "Press any key to continue...", 0
+
+; Game Over 文字
+gameOverTitle1  BYTE "  ____    _    __  __ _____    _____     _______ ____  ", 0
+gameOverTitle2  BYTE " / ___|  / \  |  \/  | ____|  / _ \ \   / / ____|  _ \ ", 0
+gameOverTitle3  BYTE "| |  _  / _ \ | |\/| |  _|   | | | \ \ / /|  _| | |_) |", 0
+gameOverTitle4  BYTE "| |_| |/ ___ \| |  | | |___  | |_| |\ V / | |___|  _ < ", 0
+gameOverTitle5  BYTE " \____/_/   \_\_|  |_|_____|  \___/  \_/  |_____|_| \_\\", 0
+gameOverPrompt  BYTE "            Press any key to exit...", 0
+
+; 大數字/字母 ASCII 圖形 (3x3 格式)
+; 數字 0-9 (每個 9 bytes = 3行 x 3字元)
+bigNum0 BYTE 0DCh,0DCh,0DCh, 0DBh,20h,0DBh, 0DBh,0DCh,0DBh
+bigNum1 BYTE 20h,0DCh,20h, 0DFh,0DBh,20h, 20h,0DBh,20h
+bigNum2 BYTE 0DCh,0DCh,0DCh, 20h,0DCh,0DFh, 0DBh,0DCh,0DCh
+bigNum3 BYTE 0DCh,0DCh,0DCh, 20h,0DCh,0DBh, 0DCh,0DCh,0DBh
+bigNum4 BYTE 0DCh,20h,0DCh, 0DBh,0DCh,0DBh, 20h,20h,0DBh
+bigNum5 BYTE 0DCh,0DCh,0DCh, 0DBh,0DCh,0DCh, 0DCh,0DCh,0DBh
+bigNum6 BYTE 0DCh,0DCh,0DCh, 0DBh,0DCh,0DCh, 0DBh,0DCh,0DBh
+bigNum7 BYTE 0DCh,0DCh,0DCh, 20h,20h,0DBh, 20h,20h,0DBh
+bigNum8 BYTE 0DCh,0DCh,0DCh, 0DBh,0DCh,0DBh, 0DBh,0DCh,0DBh
+bigNum9 BYTE 0DCh,0DCh,0DCh, 0DBh,0DCh,0DBh, 0DCh,0DCh,0DBh
+
+; 字母M/R/L (5x3 格式, 每個 15 bytes = 3行 x 5字元)
+bigLetterM BYTE 0DCh,20h,20h,20h,0DCh, 0DBh,0DFh,0DCh,0DFh,0DBh, 0DBh,20h,20h,20h,0DBh
+bigLetterR BYTE 0DCh,0DCh,0DCh,0DCh,20h, 0DBh,0DCh,0DCh,0DCh,0DFh, 0DBh,20h,20h,0DFh,0DCh
+bigLetterL BYTE 0DCh,20h,20h,20h,20h, 0DBh,20h,20h,20h,20h, 0DBh,0DCh,0DCh,0DCh,20h
 
 ; --- 地圖資料 ---
 ; mapData: 執行時使用的地圖陣列
@@ -274,9 +308,15 @@ main PROC
     call drawSideMenu       ; 畫側邊選單
 
     ; 6. 進入遊戲主迴圈
-    call moveBlock      
+    call moveBlock
+    
+    ; 檢查是否遊戲結束
+    .IF gameOver == 1
+        call showGameOver
+    .ENDIF
     
     ; 7. 結束程式
+GAME_EXIT:
     call Clrscr
     exit
 main ENDP
@@ -513,6 +553,11 @@ showHowToPlay PROC USES edx
     call Gotoxy
     mov edx, OFFSET helpLine6
     call WriteString
+    mov dh, 14
+    mov dl, 20
+    call Gotoxy
+    mov edx, OFFSET helpLine7
+    call WriteString
     mov dh, 15
     mov dl, 22
     call Gotoxy
@@ -521,6 +566,243 @@ showHowToPlay PROC USES edx
     call ReadChar ; 等待任意鍵
     ret
 showHowToPlay ENDP
+
+; =================================================================================
+; 顯示 Game Over 畫面
+; =================================================================================
+showGameOver PROC USES edx
+    call Clrscr
+    
+    ; 設定顏色為紅底白字 (0x4F)
+    mov eax, red + (white * 16)
+    call SetTextColor
+    
+    ; 繪製 GAME OVER ASCII Art
+    mov dh, 10
+    mov dl, 15
+    call Gotoxy
+    mov edx, OFFSET gameOverTitle1
+    call WriteString
+    
+    mov dh, 11
+    mov dl, 15
+    call Gotoxy
+    mov edx, OFFSET gameOverTitle2
+    call WriteString
+    
+    mov dh, 12
+    mov dl, 15
+    call Gotoxy
+    mov edx, OFFSET gameOverTitle3
+    call WriteString
+    
+    mov dh, 13
+    mov dl, 15
+    call Gotoxy
+    mov edx, OFFSET gameOverTitle4
+    call WriteString
+    
+    mov dh, 14
+    mov dl, 15
+    call Gotoxy
+    mov edx, OFFSET gameOverTitle5
+    call WriteString
+    
+    ; 提示文字
+    mov dh, 17
+    mov dl, 25
+    call Gotoxy
+    mov edx, OFFSET gameOverPrompt
+    call WriteString
+    
+    ; 等待任意鍵
+    call ReadChar
+    
+    ; 恢復預設顏色
+    mov eax, white + (black * 16)
+    call SetTextColor
+    
+    ret
+showGameOver ENDP
+
+; =================================================================================
+; 繪製大數字 (3x3 ASCII Art)
+; 參數: num (DWORD) - 要顯示的數字 (0-99)
+;       posX (DWORD) - X 座標
+;       posY (DWORD) - Y 座標
+; =================================================================================
+drawBigNumber PROC USES eax ebx ecx edx esi, num:DWORD, posX:DWORD, posY:DWORD
+    LOCAL digit1:DWORD, digit2:DWORD
+    LOCAL drawPos:COORD
+    
+    ; 分解數字為個位和十位
+    mov eax, num
+    mov ebx, 10
+    xor edx, edx
+    div ebx
+    mov digit1, eax     ; 十位
+    mov digit2, edx     ; 個位
+    
+    ; 顯示十位數字
+    mov eax, digit1
+    imul eax, 9         ; 每個數字 9 bytes (3x3)
+    lea esi, bigNum0[eax]
+    
+    mov ax, WORD PTR posX
+    mov drawPos.X, ax
+    mov ax, WORD PTR posY
+    mov drawPos.Y, ax
+    
+    ; 第1行 (十位)
+    INVOKE WriteConsoleOutputCharacter, outputHandle, esi, 3, drawPos, ADDR cellsWritten
+    
+    ; 第2行
+    add esi, 3
+    inc drawPos.Y
+    INVOKE WriteConsoleOutputCharacter, outputHandle, esi, 3, drawPos, ADDR cellsWritten
+    
+    ; 第3行
+    add esi, 3
+    inc drawPos.Y
+    INVOKE WriteConsoleOutputCharacter, outputHandle, esi, 3, drawPos, ADDR cellsWritten
+    
+    ; 顯示個位數字 (往右移4格: 3個字元+1空格)
+    mov eax, digit2
+    imul eax, 9
+    lea esi, bigNum0[eax]
+    
+    mov ax, WORD PTR posX
+    add ax, 4           ; 十位3個字元 + 1空格
+    mov drawPos.X, ax
+    mov ax, WORD PTR posY
+    mov drawPos.Y, ax
+    
+    ; 第1行 (個位)
+    INVOKE WriteConsoleOutputCharacter, outputHandle, esi, 3, drawPos, ADDR cellsWritten
+    
+    ; 第2行
+    add esi, 3
+    inc drawPos.Y
+    INVOKE WriteConsoleOutputCharacter, outputHandle, esi, 3, drawPos, ADDR cellsWritten
+    
+    ; 第3行
+    add esi, 3
+    inc drawPos.Y
+    INVOKE WriteConsoleOutputCharacter, outputHandle, esi, 3, drawPos, ADDR cellsWritten
+    
+    ret
+drawBigNumber ENDP
+
+; =================================================================================
+; 繪製大字母 (5x3 ASCII Art) - M, R, L
+; 參數: letter (DWORD) - 字母 ('M'=77, 'R'=82, 'L'=76)
+;       posX (DWORD) - X 座標
+;       posY (DWORD) - Y 座標
+; =================================================================================
+drawBigLetter PROC USES eax ebx ecx edx esi, letter:DWORD, posX:DWORD, posY:DWORD
+    LOCAL drawPos:COORD
+    
+    ; 根據字母選擇對應圖形
+    mov eax, letter
+    .IF eax == 'M'
+        lea esi, bigLetterM
+    .ELSEIF eax == 'R'
+        lea esi, bigLetterR
+    .ELSEIF eax == 'L'
+        lea esi, bigLetterL
+    .ELSE
+        ret  ; 無效字母
+    .ENDIF
+    
+    mov ax, WORD PTR posX
+    mov drawPos.X, ax
+    mov ax, WORD PTR posY
+    mov drawPos.Y, ax
+    
+    ; 第1行 (5個字元)
+    INVOKE WriteConsoleOutputCharacter, outputHandle, esi, 5, drawPos, ADDR cellsWritten
+    
+    ; 第2行
+    add esi, 5
+    inc drawPos.Y
+    INVOKE WriteConsoleOutputCharacter, outputHandle, esi, 5, drawPos, ADDR cellsWritten
+    
+    ; 第3行
+    add esi, 5
+    inc drawPos.Y
+    INVOKE WriteConsoleOutputCharacter, outputHandle, esi, 5, drawPos, ADDR cellsWritten
+    
+    ret
+drawBigLetter ENDP
+
+; =================================================================================
+; 繪製遊戲頂部資訊欄 (M: 金錢, L: 生命值, R: 回合數)
+; 格式: M: XX  L: XX  R: XX
+; 位置: 畫面最上方三行
+; =================================================================================
+drawGameStats PROC USES eax ebx ecx edx
+    LOCAL startX:DWORD
+    
+    mov startX, 10  ; 起始X座標
+    
+    ; ===== M: 金錢 =====
+    ; 繪製字母 M
+    INVOKE drawBigLetter, 'M', startX, 0
+    
+    ; 繪製冒號和數字 (M後面+6, 冒號+1, 數字+2)
+    mov eax, startX
+    add eax, 7      ; 5(M寬度) + 1(空格) + 1(冒號位置)
+    mov dh, 1       ; Y座標第2行(置中)
+    mov dl, al
+    call Gotoxy
+    
+    ; 繪製金錢數字
+    mov eax, startX
+    add eax, 6      ; 字母後縮小間距
+    INVOKE drawBigNumber, money, eax, 0
+    
+    ; ===== L: 生命值 =====
+    mov eax, startX
+    add eax, 25     ; 加大區段間距
+    mov startX, eax
+    
+    ; 繪製字母 L
+    INVOKE drawBigLetter, 'L', startX, 0
+    
+    ; 繪製冒號
+    mov eax, startX
+    add eax, 7
+    mov dh, 1
+    mov dl, al
+    call Gotoxy
+    
+    ; 繪製生命值數字
+    mov eax, startX
+    add eax, 6      ; 字母後縮小間距
+    INVOKE drawBigNumber, life, eax, 0
+    
+    ; ===== R: 回合數 =====
+    mov eax, startX
+    add eax, 25     ; 加大區段間距
+    mov startX, eax
+    
+    ; 繪製字母 R
+    INVOKE drawBigLetter, 'R', startX, 0
+    
+    ; 繪製冒號
+    mov eax, startX
+    add eax, 7
+    mov dh, 1
+    mov dl, al
+    call Gotoxy
+    
+    ; 繪製回合數字
+    mov eax, startX
+    add eax, 6      ; 字母後縮小間距
+    INVOKE drawBigNumber, cur_round, eax, 0
+    
+    ret
+drawGameStats ENDP
 
 ; =================================================================================
 ; 繪製常駐側邊選單 (Tower Selection UI)
@@ -1064,6 +1346,7 @@ getTowerTypeAtPos ENDP
 ; =================================================================================
 moveBlock PROC
 START_MOVE:
+    
     ; 1. 更新動畫與游標繪製
     call updateDashAnimation    
     call restoreGraphicsAtPos   ; 清除上一次的游標
@@ -1085,11 +1368,16 @@ DRAW_MENU_STATE:
 AFTER_DRAW:
 
     ; =========================================================
+    ; 繪製頂部狀態欄 (每幀更新)
+    ; =========================================================
+    call drawGameStats
+
+    ; =========================================================
     ; 戰鬥狀態處理 (Combat Phase)
     ; startWave: 1 = 戰鬥中, 0 = 準備期
     ; =========================================================
     cmp startWave, 1          
-    jne SKIP_COMBAT_LOGIC     ; 如果是 0，跳過怪物更新
+    jne SKIP_COMBAT_LOGIC     ; 如果是 0,跳過怪物更新
     
     ; --- 戰鬥中邏輯 (每一幀執行) ---
     call updateMonstersPositions      
@@ -1100,12 +1388,42 @@ AFTER_DRAW:
 
 SKIP_COMBAT_LOGIC:	
     ; =========================================================
+    ; 生命值檢測 - 檢查是否遊戲結束
+    ; =========================================================
+    .IF life == 0
+        mov gameOver, 1   ; 設置遊戲結束標誌
+        ret               ; 返回主程式
+    .ENDIF
+    ; =========================================================
 	
     mov eax, 50                 ; 延遲 50ms (控制遊戲速度)
     call Delay
     
     call ReadKey
     jz NO_KEY_PRESSED
+    
+    ; ---------------------------------------------------------
+    ; [Debug 快捷鍵] 測試數值調整
+    ; ---------------------------------------------------------
+    .IF ax == 0221h    ; 1: life--
+        .IF life > 0
+            dec life
+        .ENDIF
+    .ELSEIF ax == 0340h    ; @: life++
+        inc life
+    .ELSEIF ax == 0423h    ; #: money--
+        .IF money > 0
+            dec money
+        .ENDIF
+    .ELSEIF ax == 0524h    ; $: money++
+        inc money
+    .ELSEIF ax == 0625h    ; %: round--
+        .IF cur_round > 1
+            dec cur_round
+        .ENDIF
+    .ELSEIF ax == 075Eh    ; ^: round++
+        inc cur_round
+    .ENDIF
     
     ; ---------------------------------------------------------
     ; [G鍵] 開始戰鬥 (僅在準備期有效)
