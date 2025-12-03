@@ -11,8 +11,12 @@ createMonsters PROTO, roundVal:DWORD
 initMonsterData PROTO,
     monsterID:DWORD, 
     pOut:PTR Monster_status 
+	
+ctrlDraw PROTO	
     
 drawMonsters PROTO
+
+restoreGraphicsAtMonPos PROTO
 
 updateMonstersPositions PROTO
     
@@ -46,6 +50,9 @@ Monster_status STRUCT
     Speed       BYTE 0          ; 移動速度
     Reward      BYTE 0          ; 擊殺報酬
     pos         COORD <?, ?>    ; 初始座標 (4 bytes)
+	prev_pos    COORD <?, ?>	; 現在座標(清殘影用)
+	alrearyDraw BYTE 0			; 判斷是否生成(0:尚未/1:已生成)
+	moveCounter	BYTE 0			; 加到100就移動
     Direction   BYTE ?          ; 判斷移動方向
     Chars       BYTE 15 DUP(?)  ; 5x3 圖像 
 Monster_status ENDS
@@ -54,7 +61,9 @@ Monster_status ENDS
 roundMonsters Monster_status 10 DUP(<>)
 
 ; 顏色屬性
-monstersAttributes WORD monsterWidth DUP(0Ah)
+monstersAttributes WORD monsterWidth DUP(0F4h)
+
+
 
 ; 怪的起始位置
 monPosInit COORD <12, 10>
@@ -185,9 +194,10 @@ RoundsTable LABEL BYTE
 
 ; ------------------------------------------------
 ; 函數用變數
-; ------------------------------------------------  
+; ------------------------------------------------ 
+timeCounter     DWORD 0 
 xyPosition      COORD <>
-charBuf         BYTE monsterWidth DUP(?)
+charBuf         BYTE 15 DUP(?)
 bytesWritten    DWORD ?   
 
 .code
@@ -266,10 +276,10 @@ initMonsterData PROC USES eax ebx ecx edx esi edi, monsterID:DWORD, pOut:PTR Mon
     mov (Monster_status PTR [edi]).Reward, dl
     
     ; 初始化怪物位置
-    mov dx, monPosInit.x
-    mov (Monster_status PTR [edi]).pos.x, dx
-    mov dx, monPosInit.y
-    mov (Monster_status PTR [edi]).pos.y, dx
+    mov dx, monPosInit.X
+    mov (Monster_status PTR [edi]).pos.X, dx
+    mov dx, monPosInit.Y
+    mov (Monster_status PTR [edi]).pos.Y, dx
     
     ; 初始化移動方向
     mov dl, map1_InitDirection
@@ -290,17 +300,55 @@ initMonsterData PROC USES eax ebx ecx edx esi edi, monsterID:DWORD, pOut:PTR Mon
     ret
 initMonsterData ENDP
 
-; ------------------------------------------------
-; 在地圖上生成
-; ------------------------------------------------  
+  
 
 ; ------------------------------------------------
-; 修正：函式名稱改為 drawMonsters (複數) 以匹配 main.asm
+; 控制怪物的生成(判斷怪要不要畫出，要再call drawMonsters)
 ; ------------------------------------------------  
+ctrlDraw PROC USES eax ebx ecx edx esi edi
+	mov eax, timeCounter
+	inc eax
+	cmp eax, 5
+	jb storeCounter
 
-drawMonsters PROC USES eax ebx ecx edx esi edi
+	mov timeCounter, 0
+	xor ebx, ebx
+findSet:	
+	; 手動計算 Struct Offset
+    mov eax, SIZE Monster_status
+    mul ebx
+    lea edi, roundMonsters[eax]
+	
+	cmp (Monster_status PTR [edi]).alrearyDraw, 0
+	je setDraw
+	inc ebx
+	cmp ebx, 10
+	je callPROC
+	jmp findSet	
+	
+setDraw:
+	mov (Monster_status PTR [edi]).alrearyDraw, 1
+	jmp callPROC
+	
+storeCounter:
+	mov timeCounter, eax
+	
+callPROC:
+	call updateMonstersPositions 
+	call restoreGraphicsAtMonPos 
+    call removeMonsters  
+	call drawMonsters
+	
+	ret
+ctrlDraw ENDP 
 
-    xor ebx, ebx  ; monster index
+; ------------------------------------------------
+; 在地圖上生成(要用到alrearyDraw變數判斷該不該畫出)
+; ------------------------------------------------
+
+drawMonsters PROC USES eax ebx ecx esi edi
+
+    xor ebx, ebx    ; monster index
     
 nextMonster:
     ; 手動計算 Struct Offset
@@ -311,42 +359,32 @@ nextMonster:
     ; 判斷是否碰到空struct/怪物死亡或走到終點
     cmp (Monster_status PTR [edi]).Speed, 0
     je skip_draw
+	
+	;尚未到達生成時間
+	cmp (Monster_status PTR [edi]).alrearyDraw, 0
+	je skip_draw
 
     ; 起始繪製位置
-    mov eax, DWORD PTR (Monster_status PTR [edi]).pos
-    mov DWORD PTR xyPosition, eax
-
-    ; 取得怪物圖像開始地址
-    lea esi, (Monster_status PTR [edi]).Chars
-
-    mov edx, monsterHeight          ; 怪物高度
+    mov ax, (Monster_status PTR [edi]).pos.X
+    mov xyPosition.X, ax
+    mov ax, (Monster_status PTR [edi]).pos.Y
+    mov xyPosition.Y, ax
+	
+	lea esi, (Monster_status PTR [edi]).Chars                
+    ; 取得怪物圖像開始地址  
+	
+    mov ecx, monsterHeight      ; 怪物高度
 rowLoop:
-    mov ecx, monsterWidth
-    lea edi, charBuf
-    cld
-    rep movsb                       
-    
-    INVOKE WriteConsoleOutputAttribute,
-      outputHandle, 
-      ADDR monstersAttributes,
-      monsterWidth, 
-      xyPosition,
-      ADDR bytesWritten
-      
-    INVOKE WriteConsoleOutputCharacter, 
-      outputHandle, 
-      ADDR charBuf,
-      monsterWidth,
-      xyPosition,
-      ADDR count
-      
-    inc xyPosition.y
-    add esi, monsterWidth           
-    dec edx
-    jnz rowLoop
+    push ecx
+    INVOKE WriteConsoleOutputAttribute, outputHandle, ADDR monstersAttributes, monsterWidth, xyPosition, ADDR bytesWritten
+    INVOKE WriteConsoleOutputCharacter, outputHandle, esi, monsterWidth, xyPosition, ADDR count
+    add esi, monsterWidth  
+    inc xyPosition.Y        ; 游標 Y 座標向下移動一行
+	pop ecx
+	loop rowLoop
 
 skip_draw:
-    inc ebx                         
+    inc ebx                 
     cmp ebx, 10
     jl nextMonster
 
@@ -354,12 +392,97 @@ skip_draw:
 drawMonsters ENDP
 
 ; ------------------------------------------------
+; 清除殘影(要用到alrearyDraw變數判斷該不該清除/且需大改成一次移動一整格)
+; ------------------------------------------------
+restoreGraphicsAtMonPos PROC USES eax ebx ecx edx esi edi
+    xor ebx, ebx ; EDI = monster index (loop counter)
+
+next_restore:
+    ; 手動計算 Struct Offset
+    mov eax, SIZE Monster_status
+    mul ebx
+	push ebx
+    lea edi, roundMonsters[eax] ; ESI -> monster struct
+	
+	; 如果速度是 0 (非活躍或未初始化)，跳過
+	cmp (Monster_status PTR [edi]).Speed, 0
+    je skip_this_mon   
+
+	;尚未到達生成時間
+	cmp (Monster_status PTR [edi]).alrearyDraw, 0
+	je skip_this_mon
+	
+    ; 將要恢復的元件座標存入xyPosition
+    mov ax, word ptr (Monster_status PTR [edi]).prev_pos.X
+    mov xyPosition.X, ax
+    mov ax, word ptr (Monster_status PTR [edi]).prev_pos.Y
+    mov xyPosition.Y, ax
+
+RESTORE_MAP:
+    ;找對應的地圖索引
+    movzx eax, (Monster_status PTR [edi]).prev_pos.X
+    sub eax, 7
+    mov ebx, blockWidth
+    xor edx, edx
+    div ebx
+    mov ebx, eax ; EBX : 地圖X座標
+    
+    ; Y Index (Row)
+    movzx eax, (Monster_status PTR [edi]).prev_pos.Y
+    sub eax, 4
+    mov ecx, blockHeight
+    xor edx, edx
+    div ecx ; EAX = 地圖Y座標
+    
+    ; 檢查邊界
+    cmp ebx, MAP_WIDTH
+    jge skip_this_mon
+    cmp eax, MAP_HEIGHT
+    jge skip_this_mon
+    
+    ; 找對應的地圖元件
+    mov ecx, MAP_WIDTH
+    mul ecx
+    add eax, ebx
+    mov esi, OFFSET mapData
+    add esi, eax
+    mov cl, BYTE PTR [esi] ; CL : 元件
+    
+    ; 根據 ID 找到對應的 ASCII 圖形位址
+    movzx eax, cl
+    mov edx, 15 ; 每個元件 15 bytes
+    mul edx
+    mov esi, OFFSET componentChars
+    add esi, eax
+    
+    ; 繪製元件
+    mov ecx, blockHeight
+DRAW_RESTORE_LOOP:
+    push ecx
+    INVOKE WriteConsoleOutputCharacter, outputHandle, esi, blockWidth, xyPosition, ADDR count
+    INVOKE WriteConsoleOutputAttribute, outputHandle, ADDR blockAttributes, blockWidth, xyPosition, ADDR cellsWritten
+    add esi, blockWidth
+    inc xyPosition.Y
+    pop ecx
+    loop DRAW_RESTORE_LOOP
+
+skip_this_mon:
+    inc edi ; Increment monster index (EDI)
+    cmp edi, 10
+	pop ebx
+    jl next_restore
+    
+    ret
+restoreGraphicsAtMonPos ENDP
+
+; ------------------------------------------------
 ; 怪物移動
 ; ------------------------------------------------  
 
 updateMonstersPositions PROC USES eax ebx ecx edx esi edi
-
+	
     xor ebx, ebx      ; 怪的索引
+
 
 nextMon:
     ; [修正] 手動計算 Struct Offset
@@ -370,83 +493,89 @@ nextMon:
     movzx ecx, (Monster_status PTR [edi]).Speed    
     cmp ecx, 0
     jle skip 
-
+	
+	;尚未到達生成時間
+	cmp (Monster_status PTR [edi]).alrearyDraw, 0
+	je skip
+	
+	mov dl,(Monster_status PTR [edi]).moveCounter
+	add dl, (Monster_status PTR [edi]).Speed
+	cmp dl, 15
+	jge startMove
+	
+saveCount:
+	mov (Monster_status PTR [edi]).moveCounter, dl
+	jmp skip
+	
+startMove:	
+	mov (Monster_status PTR [edi]).moveCounter, 0
 move_loop:              
-    ; 讀怪獸座標
-    mov dx, (Monster_status PTR [edi]).pos.x
-    mov ax, (Monster_status PTR [edi]).pos.y
-    
-    sub dx, blockPosInit.x
-    sub ax, blockPosInit.y
-
+       
+	;找對應的地圖索引
+    mov ax, (Monster_status PTR [edi]).pos.X
+	mov (Monster_status PTR [edi]).prev_pos.X, ax
+    sub ax, blockPosInit.X
+	movzx eax, ax
+    mov ebx, blockWidth
     xor edx, edx
-    movzx eax, ax        
+    div ebx
+    mov ebx, eax ; EBX : 地圖X座標
     
-    ; [修正] div 指令不能用常數，必須轉到暫存器
-    push ecx
+    ; Y Index (Row)
+    mov ax, (Monster_status PTR [edi]).pos.Y
+	mov (Monster_status PTR [edi]).prev_pos.Y, ax
+    sub ax, blockPosInit.Y
+	movzx eax, ax
     mov ecx, blockHeight
-    div ecx          
-    pop ecx
+    xor edx, edx
+    div ecx ; EAX = 地圖Y座標
+	
     
-    movzx eax, ax        
+    ; 檢查邊界
+    cmp ebx, MAP_WIDTH
+    jge skip
+    cmp eax, MAP_HEIGHT
+    jge skip
     
-    push ebx             
-    mov ebx, MAP_WIDTH
-    mul ebx              
-    pop ebx
-    
-    mov esi, eax         
-
-    ; 計算 X 索引
-    mov ax, (Monster_status PTR [edi]).pos.x
-    sub ax, blockPosInit.x
-    xor dx, dx
-    
-    ; [修正] div 指令不能用常數
-    push ecx
-    mov ecx, blockWidth
-    div ecx            
-    pop ecx
-    
-    movzx eax, ax
-    add esi, eax         
-
-    ; 取得地圖元件
-    mov eax, OFFSET mapData 
-    add eax, esi
-    mov al, byte ptr [eax]  
+    ; 找對應的地圖元件
+    mov ecx, MAP_WIDTH
+    mul ecx
+    add eax, ebx
+    mov esi, OFFSET mapData
+    add esi, eax
+    mov cl, BYTE PTR [esi] ; CL : 元件  
     
     mov dl, (Monster_status PTR [edi]).Direction
 
     ; 物件判斷
-    cmp al, COMPONENT_EXIT
+    cmp cl, COMPONENT_EXIT
     je skip_all
 
-    cmp al, COMPONENT_PATH_H
+    cmp cl, COMPONENT_PATH_H
     je move_H
-    cmp al, COMPONENT_PATH_V
+    cmp cl, COMPONENT_PATH_V
     je move_V
 
-    cmp al, COMPONENT_CORNER_1  
+    cmp cl, COMPONENT_CORNER_1  
     je turnCorner1
-    cmp al, COMPONENT_CORNER_2  
+    cmp cl, COMPONENT_CORNER_2  
     je turnCorner2
-    cmp al, COMPONENT_CORNER_3  
+    cmp cl, COMPONENT_CORNER_3  
     je turnCorner3
-    cmp al, COMPONENT_CORNER_4  
+    cmp cl, COMPONENT_CORNER_4  
     je turnCorner4
 
 
     ; 直走
 move_H:
     cmp dl, 2   
-    je move_L
-    jmp move_R
+    je move_left
+    jmp move_right
 
 move_V:
     cmp dl, 0   
-    je move_U
-    jmp move_D
+    je move_up
+    jmp move_down
 
 
     ; 轉角處
@@ -480,28 +609,20 @@ turnCorner4:
     jmp move_up 
     
 move_up: 
-    sub (Monster_status PTR [edi]).pos.y, 1 
+    sub (Monster_status PTR [edi]).pos.y, blockHeight 
     jmp moved
 move_down: 
-    add (Monster_status PTR [edi]).pos.y, 1 
+    add (Monster_status PTR [edi]).pos.y, blockHeight 
     jmp moved
 move_left: 
-    sub (Monster_status PTR [edi]).pos.x, 1 
+    sub (Monster_status PTR [edi]).pos.x, blockWidth
     jmp moved
 move_right: 
-    add (Monster_status PTR [edi]).pos.x, 1 
-    
-move_U: jmp move_up
-move_D: jmp move_down
-move_L: jmp move_left
-move_R: jmp move_right
+    add (Monster_status PTR [edi]).pos.x, blockWidth 
+
+
 
 moved:
-    dec ecx
-    cmp ecx, 0
-    jg move_loop        
-
-
 skip_all:
 skip:
     inc ebx

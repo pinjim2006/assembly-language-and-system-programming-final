@@ -53,6 +53,8 @@ createMonsters PROTO :DWORD
 updateMonstersPositions PROTO
 removeMonsters PROTO
 drawMonsters PROTO
+restoreGraphicsAtMonPos PROTO
+ctrlDraw PROTO
 
 ; =================================================================================
 ; 常數定義 (Constants)
@@ -1380,9 +1382,8 @@ AFTER_DRAW:
     jne SKIP_COMBAT_LOGIC     ; 如果是 0,跳過怪物更新
     
     ; --- 戰鬥中邏輯 (每一幀執行) ---
-    call updateMonstersPositions      
-    call removeMonsters  	 
-    call drawMonsters
+    	 
+    call ctrlDraw
     
     ; [註] 需在 monsters.asm 實作: 若 monsterCount == 0, 設 startWave = 0
 
