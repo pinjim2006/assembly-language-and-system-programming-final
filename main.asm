@@ -239,14 +239,6 @@ helpLine6       BYTE "ESC: Open menu", 0
 helpLine7       BYTE "Towers can only be placed on empty tiles", 0
 helpPrompt      BYTE "Press any key to continue...", 0
 
-; Game Over 文字
-gameOverTitle1  BYTE "  ____    _    __  __ _____    _____     _______ ____  ", 0
-gameOverTitle2  BYTE " / ___|  / \  |  \/  | ____|  / _ \ \   / / ____|  _ \ ", 0
-gameOverTitle3  BYTE "| |  _  / _ \ | |\/| |  _|   | | | \ \ / /|  _| | |_) |", 0
-gameOverTitle4  BYTE "| |_| |/ ___ \| |  | | |___  | |_| |\ V / | |___|  _ < ", 0
-gameOverTitle5  BYTE " \____/_/   \_\_|  |_|_____|  \___/  \_/  |_____|_| \_\\", 0
-gameOverPrompt  BYTE "            Press any key to exit...", 0
-
 ; 大數字/字母 ASCII 圖形 (3x3 格式)
 ; 數字 0-9 (每個 9 bytes = 3行 x 3字元)
 bigNum0 BYTE 0DCh,0DCh,0DCh, 0DBh,20h,0DBh, 0DBh,0DCh,0DBh
@@ -260,35 +252,33 @@ bigNum7 BYTE 0DCh,0DCh,0DCh, 20h,20h,0DBh, 20h,20h,0DBh
 bigNum8 BYTE 0DCh,0DCh,0DCh, 0DBh,0DCh,0DBh, 0DBh,0DCh,0DBh
 bigNum9 BYTE 0DCh,0DCh,0DCh, 0DBh,0DCh,0DBh, 0DCh,0DCh,0DBh
 
-; 字母M/R/L (5x3 格式, 每個 15 bytes = 3行 x 5字元)
-bigLetterM BYTE 0DCh,20h,20h,20h,0DCh, 0DBh,0DFh,0DCh,0DFh,0DBh, 0DBh,20h,20h,20h,0DBh
-bigLetterR BYTE 0DCh,0DCh,0DCh,0DCh,20h, 0DBh,0DCh,0DCh,0DCh,0DFh, 0DBh,20h,20h,0DFh,0DCh
-bigLetterL BYTE 0DCh,20h,20h,20h,20h, 0DBh,20h,20h,20h,20h, 0DBh,0DCh,0DCh,0DCh,20h
-
 ; 完整字母表 A-Z (5x3 格式, 每個 15 bytes = 3行 x 5字元)
 bigLetterA BYTE 20h,0DCh,0DCh,0DCh,20h, 0DBh,0DCh,0DCh,0DCh,0DBh, 0DBh,20h,20h,20h,0DBh
-bigLetterB BYTE 0DCh,0DCh,0DCh,0DCh,20h, 0DBh,0DCh,0DCh,0DCh,0DBh, 0DBh,0DCh,0DCh,0DCh,0DBh
-bigLetterC BYTE 20h,0DCh,0DCh,0DCh,20h, 0DBh,20h,20h,20h,20h, 0DBh,0DCh,0DCh,0DCh,20h
-bigLetterD BYTE 0DCh,0DCh,0DCh,0DCh,20h, 0DBh,20h,20h,20h,0DBh, 0DBh,0DCh,0DCh,0DCh,0DBh
-bigLetterE BYTE 0DCh,0DCh,0DCh,0DCh,20h, 0DBh,0DCh,0DCh,0DCh,20h, 0DBh,0DCh,0DCh,0DCh,20h
-bigLetterF BYTE 0DCh,0DCh,0DCh,0DCh,20h, 0DBh,0DCh,0DCh,0DCh,20h, 0DBh,20h,20h,20h,20h
-bigLetterG BYTE 20h,0DCh,0DCh,0DCh,20h, 0DBh,20h,0DCh,0DCh,0DCh, 0DBh,0DCh,0DCh,0DCh,0DBh
+bigLetterB BYTE 0DCh,0DCh,0DCh,0DCh,20h, 0DBh,0DCh,0DCh,0DCh,0DFh, 0DBh,0DCh,0DCh,0DCh,0DFh
+bigLetterC BYTE 20h,0DCh,0DCh,0DCh,20h, 0DBh,20h,20h,20h,20h, 0DFh,0DCh,0DCh,0DCh,20h
+bigLetterD BYTE 0DCh,0DCh,0DCh,0DCh,20h, 0DBh,20h,20h,20h,0DBh, 0DBh,0DCh,0DCh,0DCh,0DFh
+bigLetterE BYTE 0DCh,0DCh,0DCh,0DCh,0DCh, 0DBh,0DCh,0DCh,0DCh,20h, 0DBh,0DCh,0DCh,0DCh,0DCh
+bigLetterF BYTE 0DCh,0DCh,0DCh,0DCh,0DCh, 0DBh,0DCh,0DCh,0DCh,20h, 0DBh,20h,20h,20h,20h
+bigLetterG BYTE 20h,0DCh,0DCh,0DCh,0DCh, 0DBh,20h,0DCh,0DCh,0DCh, 0DFh,0DCh,0DCh,0DCh,0DBh
 bigLetterH BYTE 0DCh,20h,20h,20h,0DCh, 0DBh,0DCh,0DCh,0DCh,0DBh, 0DBh,20h,20h,20h,0DBh
-bigLetterI BYTE 0DCh,0DCh,0DCh,0DCh,0DCh, 20h,20h,0DBh,20h,20h, 0DCh,0DCh,0DBh,0DCh,0DCh
-bigLetterJ BYTE 20h,20h,20h,0DCh,0DCh, 20h,20h,20h,20h,0DBh, 0DCh,0DCh,0DCh,0DCh,0DBh
-bigLetterK BYTE 0DCh,20h,20h,0DCh,0DCh, 0DBh,0DCh,0DCh,0DCh,20h, 0DBh,20h,20h,0DFh,0DCh
-bigLetterN BYTE 0DCh,0DCh,20h,20h,0DCh, 0DBh,0DBh,0DFh,0DCh,0DBh, 0DBh,20h,20h,0DBh,0DBh
-bigLetterO BYTE 20h,0DCh,0DCh,0DCh,20h, 0DBh,20h,20h,20h,0DBh, 0DBh,0DCh,0DCh,0DCh,0DBh
+bigLetterI BYTE 20h,0DCh,0DCh,0DCh,20h, 20h,20h,0DBh,20h,20h, 20h,0DCh,0DBh,0DCh,20h
+bigLetterJ BYTE 20h,0DCh,0DCh,0DCh,20h, 20h,20h,0DBh,20h,20h, 0DFh,0DCh,0DFh,20h,20h
+bigLetterK BYTE 0DCh,20h,20h,0DCh,20h, 0DBh,0DCh,0DFh,20h,20h, 0DBh,20h,0DFh,0DCh,20h
+bigLetterL BYTE 0DCh,20h,20h,20h,20h, 0DBh,20h,20h,20h,20h, 0DBh,0DCh,0DCh,0DCh,20h
+bigLetterM BYTE 0DCh,20h,20h,20h,0DCh, 0DBh,0DFh,0DCh,0DFh,0DBh, 0DBh,20h,20h,20h,0DBh
+bigLetterN BYTE 0DCh,20h,20h,20h,0DCh, 0DBh,0DFh,0DCh,20h,0DBh, 0DBh,20h,20h,0DFh,0DBh
+bigLetterO BYTE 20h,0DCh,0DCh,0DCh,20h, 0DBh,20h,20h,20h,0DBh, 0DFh,0DCh,0DCh,0DCh,0DFh
 bigLetterP BYTE 0DCh,0DCh,0DCh,0DCh,20h, 0DBh,0DCh,0DCh,0DCh,0DFh, 0DBh,20h,20h,20h,20h
-bigLetterQ BYTE 20h,0DCh,0DCh,0DCh,20h, 0DBh,20h,0DFh,0DCh,20h, 0DBh,0DCh,0DCh,0DBh,0DCh
-bigLetterS BYTE 20h,0DCh,0DCh,0DCh,20h, 20h,0DCh,0DCh,0DCh,20h, 20h,0DCh,0DCh,0DCh,20h
+bigLetterQ BYTE 20h,0DCh,0DCh,0DCh,20h, 0DBh,20h,0DCh,20h,0DBh, 0DFh,0DCh,0DCh,0DBh,0DCh
+bigLetterR BYTE 0DCh,0DCh,0DCh,0DCh,20h, 0DBh,0DCh,0DCh,0DCh,0DFh, 0DBh,20h,20h,0DFh,0DCh
+bigLetterS BYTE 20h,0DCh,0DCh,0DCh,0DCh, 0DFh,0DCh,0DCh,0DCh,20h, 0DCh,0DCh,0DCh,0DCh,0DFh
 bigLetterT BYTE 0DCh,0DCh,0DCh,0DCh,0DCh, 20h,20h,0DBh,20h,20h, 20h,20h,0DBh,20h,20h
-bigLetterU BYTE 0DCh,20h,20h,20h,0DCh, 0DBh,20h,20h,20h,0DBh, 0DBh,0DCh,0DCh,0DCh,0DBh
+bigLetterU BYTE 0DCh,20h,20h,20h,0DCh, 0DBh,20h,20h,20h,0DBh, 0DFh,0DCh,0DCh,0DCh,0DFh
 bigLetterV BYTE 0DCh,20h,20h,20h,0DCh, 0DBh,20h,20h,20h,0DBh, 20h,0DFh,0DCh,0DFh,20h
-bigLetterW BYTE 0DCh,20h,20h,20h,0DCh, 0DBh,20h,0DCh,20h,0DBh, 0DBh,0DFh,0DBh,0DFh,0DBh
-bigLetterX BYTE 0DCh,20h,20h,20h,0DCh, 20h,0DFh,0DCh,0DFh,20h, 0DCh,20h,20h,20h,0DCh
-bigLetterY BYTE 0DCh,20h,20h,20h,0DCh, 0DBh,0DCh,0DCh,0DCh,0DBh, 20h,20h,0DBh,20h,20h
-bigLetterZ BYTE 0DCh,0DCh,0DCh,0DCh,0DCh, 20h,20h,0DCh,20h,20h, 0DCh,0DCh,0DCh,0DCh,0DCh
+bigLetterW BYTE 0DCh,20h,20h,20h,0DCh, 0DBh,20h,20h,20h,0DBh, 0DFh,0DCh,0DFh,0DCh,0DFh
+bigLetterX BYTE 0DCh,20h,20h,20h,0DCh, 20h,0DFh,0DCh,0DFh,20h, 0DCh,0DFh,20h,0DFh,0DCh
+bigLetterY BYTE 0DCh,20h,20h,20h,0DCh, 20h,0DFh,0DCh,0DFh,20h, 20h,20h,0DBh,20h,20h
+bigLetterZ BYTE 0DCh,0DCh,0DCh,0DCh,0DCh, 20h,20h,0DCh,0DFh,20h, 0DCh,0DBh,0DCh,0DCh,0DCh
 
 ; --- 地圖資料 ---
 ; mapData: 執行時使用的地圖陣列
