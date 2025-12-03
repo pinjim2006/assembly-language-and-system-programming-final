@@ -68,6 +68,9 @@ monstersAttributes WORD monsterWidth DUP(0F4h)
 ; 怪的起始位置
 monPosInit COORD <12, 10>
 
+; 怪的終止位置
+monPosEnd COORD <72, 7>
+
 ; 怪的初始移動方向
 map1_InitDirection BYTE 1
 
@@ -195,10 +198,11 @@ RoundsTable LABEL BYTE
 ; ------------------------------------------------
 ; 函數用變數
 ; ------------------------------------------------ 
-timeCounter     DWORD 0 
-xyPosition      COORD <>
-charBuf         BYTE 15 DUP(?)
-bytesWritten    DWORD ?   
+timeCounter     DWORD 0 		; 計算生怪延遲時間
+xyPosition      COORD <>		; 暫存座標
+charBuf         BYTE 15 DUP(?)	; 暫存圖像資料
+bytesWritten    DWORD ? 
+monsterCount	BYTE 0    		; 計算場上怪獸數  
 
 .code
 
@@ -308,7 +312,7 @@ initMonsterData ENDP
 ctrlDraw PROC USES eax ebx ecx edx esi edi
 	mov eax, timeCounter
 	inc eax
-	cmp eax, 5
+	cmp eax, 20
 	jb storeCounter
 
 	mov timeCounter, 0
@@ -328,6 +332,9 @@ findSet:
 	
 setDraw:
 	mov (Monster_status PTR [edi]).alrearyDraw, 1
+	;mov dl, monsterCount    <---------------------------------(施工中)
+	;inc dl
+	;mov monsterCount, dl
 	jmp callPROC
 	
 storeCounter:
@@ -404,13 +411,9 @@ next_restore:
 	push ebx
     lea edi, roundMonsters[eax] ; ESI -> monster struct
 	
-	; 如果速度是 0 (非活躍或未初始化)，跳過
-	cmp (Monster_status PTR [edi]).Speed, 0
-    je skip_this_mon   
-
 	;尚未到達生成時間
 	cmp (Monster_status PTR [edi]).alrearyDraw, 0
-	je skip_this_mon
+	je skip_this_mon  
 	
     ; 將要恢復的元件座標存入xyPosition
     mov ax, word ptr (Monster_status PTR [edi]).prev_pos.X
@@ -468,9 +471,10 @@ DRAW_RESTORE_LOOP:
 
 skip_this_mon:
     inc edi ; Increment monster index (EDI)
-    cmp edi, 10
 	pop ebx
-    jl next_restore
+	inc ebx
+	cmp ebx, 10
+    jb next_restore
     
     ret
 restoreGraphicsAtMonPos ENDP
@@ -498,9 +502,10 @@ nextMon:
 	cmp (Monster_status PTR [edi]).alrearyDraw, 0
 	je skip
 	
+	;由速度控制移動
 	mov dl,(Monster_status PTR [edi]).moveCounter
 	add dl, (Monster_status PTR [edi]).Speed
-	cmp dl, 15
+	cmp dl, 10
 	jge startMove
 	
 saveCount:
@@ -636,7 +641,7 @@ updateMonstersPositions ENDP
 ; 移除死亡或走到終點的怪
 ; ------------------------------------------------  
 
-removeMonsters PROC USES ebx edi
+removeMonsters PROC USES eax ebx edx edi
 
     xor ebx, ebx
 
@@ -645,27 +650,45 @@ check:
     mov eax, SIZE Monster_status
     mul ebx
     lea edi, roundMonsters[eax]
-    
+	
     cmp (Monster_status PTR [edi]).Speed, 0       
     je nextMon
     
+	;判斷怪被擊殺
     cmp (Monster_status PTR [edi]).HP, 0
     jle monDead               
     
-    cmp (Monster_status PTR [edi]).pos.x, 100     
-    jne nextMon
-    cmp (Monster_status PTR [edi]).pos.y, 100      
+	;判斷怪抵達終點
+	mov dx, monPosEnd.X 
+    cmp (Monster_status PTR [edi]).pos.X, dx   
+    jne nextMon	
+	mov dx, monPosEnd.Y
+    cmp (Monster_status PTR [edi]).pos.Y, dx      
     jne nextMon
     jmp monArrive
 
 monDead:
-	;待新增擊殺報酬
-    mov (Monster_status PTR [edi]).Speed, 0     
-    jmp nextMon
+	;待新增擊殺報酬     
+    jmp processMonData
 
 monArrive:
 	;待新增怪物抵達終點懲罰
-    mov (Monster_status PTR [edi]).Speed, 0
+	
+processMonData:
+	mov (Monster_status PTR [edi]).Speed, 0
+	;(施工中)
+	;mov dl, monsterCount
+	;dec dl
+	;mov monsterCount, dl
+	;cmp dl, 0
+	;ja nextMon
+	
+; 判斷回合結束與否	(施工中)
+endWave:
+	;mov startWave, 0
+	;mov dl, cur_round
+	;inc dl
+	;mov cur_round, dl
 
 nextMon:            
     inc ebx
