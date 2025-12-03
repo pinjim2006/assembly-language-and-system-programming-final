@@ -12,8 +12,11 @@ showStartScreen PROTO       ; 顯示遊戲標題畫面
 showEscMenu PROTO           ; 顯示遊戲中暫停選單 (ESC)
 showHowToPlay PROTO         ; 顯示操作說明
 showGameOver PROTO          ; 顯示 Game Over 畫面
+showYouWin PROTO            ; 顯示 YOU WIN 畫面 (cur_round == 21)
+endGameMenu PROTO           ; 顯示結束遊戲選單 (Restart/How to Play/End Game)
 drawBigNumber PROTO :DWORD, :DWORD, :DWORD ; 繪製大數字 (數字, X座標, Y座標)
 drawBigLetter PROTO :DWORD, :DWORD, :DWORD ; 繪製大字母 (字母M/R/L, X座標, Y座標)
+drawString PROTO :DWORD, :DWORD, :DWORD ; 繪製字串 (字串指標, X座標, Y座標)
 drawGameStats PROTO         ; 繪製遊戲頂部資訊欄 (金錢、生命、回合)
 initConsoleWindow PROTO     ; 初始化視窗大小與緩衝區
 outerBox PROTO              ; 繪製遊戲主外框
@@ -215,6 +218,16 @@ menuArrow       BYTE ">>", 0
 twoSpaces       BYTE "  ", 0
 menuPrompt      BYTE "Use Arrow Keys to select, ENTER to confirm", 0
 
+; 結束遊戲選單文字 (不含 Continue)
+endMenuTitle    BYTE "========== GAME END ==========", 0
+endMenuOption1  BYTE "   Restart", 0
+endMenuOption2  BYTE "   How to Play", 0
+endMenuOption3  BYTE "   End Game", 0
+
+; Pixel Art 文字
+youWinText      BYTE "YOU WIN", 0
+gameOverText    BYTE "GAME OVER", 0
+
 ; 使用說明文字
 helpTitle       BYTE "========== HOW TO PLAY ==========", 0
 helpLine1       BYTE "Arrow Keys: Move cursor", 0
@@ -251,6 +264,31 @@ bigNum9 BYTE 0DCh,0DCh,0DCh, 0DBh,0DCh,0DBh, 0DCh,0DCh,0DBh
 bigLetterM BYTE 0DCh,20h,20h,20h,0DCh, 0DBh,0DFh,0DCh,0DFh,0DBh, 0DBh,20h,20h,20h,0DBh
 bigLetterR BYTE 0DCh,0DCh,0DCh,0DCh,20h, 0DBh,0DCh,0DCh,0DCh,0DFh, 0DBh,20h,20h,0DFh,0DCh
 bigLetterL BYTE 0DCh,20h,20h,20h,20h, 0DBh,20h,20h,20h,20h, 0DBh,0DCh,0DCh,0DCh,20h
+
+; 完整字母表 A-Z (5x3 格式, 每個 15 bytes = 3行 x 5字元)
+bigLetterA BYTE 20h,0DCh,0DCh,0DCh,20h, 0DBh,0DCh,0DCh,0DCh,0DBh, 0DBh,20h,20h,20h,0DBh
+bigLetterB BYTE 0DCh,0DCh,0DCh,0DCh,20h, 0DBh,0DCh,0DCh,0DCh,0DBh, 0DBh,0DCh,0DCh,0DCh,0DBh
+bigLetterC BYTE 20h,0DCh,0DCh,0DCh,20h, 0DBh,20h,20h,20h,20h, 0DBh,0DCh,0DCh,0DCh,20h
+bigLetterD BYTE 0DCh,0DCh,0DCh,0DCh,20h, 0DBh,20h,20h,20h,0DBh, 0DBh,0DCh,0DCh,0DCh,0DBh
+bigLetterE BYTE 0DCh,0DCh,0DCh,0DCh,20h, 0DBh,0DCh,0DCh,0DCh,20h, 0DBh,0DCh,0DCh,0DCh,20h
+bigLetterF BYTE 0DCh,0DCh,0DCh,0DCh,20h, 0DBh,0DCh,0DCh,0DCh,20h, 0DBh,20h,20h,20h,20h
+bigLetterG BYTE 20h,0DCh,0DCh,0DCh,20h, 0DBh,20h,0DCh,0DCh,0DCh, 0DBh,0DCh,0DCh,0DCh,0DBh
+bigLetterH BYTE 0DCh,20h,20h,20h,0DCh, 0DBh,0DCh,0DCh,0DCh,0DBh, 0DBh,20h,20h,20h,0DBh
+bigLetterI BYTE 0DCh,0DCh,0DCh,0DCh,0DCh, 20h,20h,0DBh,20h,20h, 0DCh,0DCh,0DBh,0DCh,0DCh
+bigLetterJ BYTE 20h,20h,20h,0DCh,0DCh, 20h,20h,20h,20h,0DBh, 0DCh,0DCh,0DCh,0DCh,0DBh
+bigLetterK BYTE 0DCh,20h,20h,0DCh,0DCh, 0DBh,0DCh,0DCh,0DCh,20h, 0DBh,20h,20h,0DFh,0DCh
+bigLetterN BYTE 0DCh,0DCh,20h,20h,0DCh, 0DBh,0DBh,0DFh,0DCh,0DBh, 0DBh,20h,20h,0DBh,0DBh
+bigLetterO BYTE 20h,0DCh,0DCh,0DCh,20h, 0DBh,20h,20h,20h,0DBh, 0DBh,0DCh,0DCh,0DCh,0DBh
+bigLetterP BYTE 0DCh,0DCh,0DCh,0DCh,20h, 0DBh,0DCh,0DCh,0DCh,0DFh, 0DBh,20h,20h,20h,20h
+bigLetterQ BYTE 20h,0DCh,0DCh,0DCh,20h, 0DBh,20h,0DFh,0DCh,20h, 0DBh,0DCh,0DCh,0DBh,0DCh
+bigLetterS BYTE 20h,0DCh,0DCh,0DCh,20h, 20h,0DCh,0DCh,0DCh,20h, 20h,0DCh,0DCh,0DCh,20h
+bigLetterT BYTE 0DCh,0DCh,0DCh,0DCh,0DCh, 20h,20h,0DBh,20h,20h, 20h,20h,0DBh,20h,20h
+bigLetterU BYTE 0DCh,20h,20h,20h,0DCh, 0DBh,20h,20h,20h,0DBh, 0DBh,0DCh,0DCh,0DCh,0DBh
+bigLetterV BYTE 0DCh,20h,20h,20h,0DCh, 0DBh,20h,20h,20h,0DBh, 20h,0DFh,0DCh,0DFh,20h
+bigLetterW BYTE 0DCh,20h,20h,20h,0DCh, 0DBh,20h,0DCh,20h,0DBh, 0DBh,0DFh,0DBh,0DFh,0DBh
+bigLetterX BYTE 0DCh,20h,20h,20h,0DCh, 20h,0DFh,0DCh,0DFh,20h, 0DCh,20h,20h,20h,0DCh
+bigLetterY BYTE 0DCh,20h,20h,20h,0DCh, 0DBh,0DCh,0DCh,0DCh,0DBh, 20h,20h,0DBh,20h,20h
+bigLetterZ BYTE 0DCh,0DCh,0DCh,0DCh,0DCh, 20h,20h,0DCh,20h,20h, 0DCh,0DCh,0DCh,0DCh,0DCh
 
 ; --- 地圖資料 ---
 ; mapData: 執行時使用的地圖陣列
@@ -293,6 +331,7 @@ main PROC
     ; 2. 初始化視窗設定 (大小、緩衝區)
     call initConsoleWindow
 
+GAME_RESTART:
     ; 3. 設定預設顏色 (白底黑字) 並清空螢幕
     INVOKE SetConsoleTextAttribute, outputHandle, 0F0h 
     call Clrscr 
@@ -312,9 +351,17 @@ main PROC
     ; 6. 進入遊戲主迴圈
     call moveBlock
     
-    ; 檢查是否遊戲結束
-    .IF gameOver == 1
+    ; 檢查是否遊戲結束或勝利
+    .IF cur_round == 21
+        ; 玩家贏了！
+        call showYouWin
+        cmp eax, 999    ; 檢查是否要重新開始
+        je GAME_RESTART
+    .ELSEIF gameOver == 1
+        ; 玩家失敗
         call showGameOver
+        cmp eax, 999    ; 檢查是否要重新開始
+        je GAME_RESTART
     .ENDIF
     
     ; 7. 結束程式
@@ -516,6 +563,10 @@ FlushKeyBuffer ENDP
 ; 顯示操作說明 (How To Play)
 ; =================================================================================
 showHowToPlay PROC USES edx
+    ; 設定白底黑字
+    mov eax, black + (white * 16)
+    call SetTextColor
+    
     call Clrscr
     ; 繪製多行說明文字 ...
     mov dh, 6
@@ -579,53 +630,227 @@ showGameOver PROC USES edx
     mov eax, red + (white * 16)
     call SetTextColor
     
-    ; 繪製 GAME OVER ASCII Art
-    mov dh, 10
-    mov dl, 15
-    call Gotoxy
-    mov edx, OFFSET gameOverTitle1
-    call WriteString
-    
-    mov dh, 11
-    mov dl, 15
-    call Gotoxy
-    mov edx, OFFSET gameOverTitle2
-    call WriteString
-    
-    mov dh, 12
-    mov dl, 15
-    call Gotoxy
-    mov edx, OFFSET gameOverTitle3
-    call WriteString
-    
-    mov dh, 13
-    mov dl, 15
-    call Gotoxy
-    mov edx, OFFSET gameOverTitle4
-    call WriteString
-    
-    mov dh, 14
-    mov dl, 15
-    call Gotoxy
-    mov edx, OFFSET gameOverTitle5
-    call WriteString
-    
-    ; 提示文字
-    mov dh, 17
-    mov dl, 25
-    call Gotoxy
-    mov edx, OFFSET gameOverPrompt
-    call WriteString
-    
-    ; 等待任意鍵
-    call ReadChar
+    ; 繪製 GAME OVER 使用 pixel art
+    mov edx, OFFSET gameOverText
+    INVOKE drawString, edx, 35, 10
     
     ; 恢復預設顏色
     mov eax, white + (black * 16)
     call SetTextColor
     
+    ; 顯示結束遊戲選單並返回其結果
+    call endGameMenu
+    ; eax 已包含 endGameMenu 的返回值 (999=restart, 0=exit)
+    
     ret
 showGameOver ENDP
+
+; =================================================================================
+; 顯示 YOU WIN 畫面 (當 cur_round == 21 時)
+; =================================================================================
+showYouWin PROC USES edx
+    call Clrscr
+    
+    ; 設定顏色為黃底黑字
+    mov eax, black + (yellow * 16)
+    call SetTextColor
+    
+    ; 繪製 YOU WIN 使用 pixel art
+    mov edx, OFFSET youWinText
+    INVOKE drawString, edx, 35, 10
+    
+    ; 恢復預設顏色
+    mov eax, white + (black * 16)
+    call SetTextColor
+    
+    ; 顯示結束遊戲選單並返回其結果
+    call endGameMenu
+    ; eax 已包含 endGameMenu 的返回值 (999=restart, 0=exit)
+    
+    ret
+showYouWin ENDP
+
+; =================================================================================
+; 結束遊戲選單 (Restart / How to Play / End Game)
+; 不含 Continue 選項
+; =================================================================================
+endGameMenu PROC USES ebx ecx edx
+    LOCAL oldCursor:BYTE
+    LOCAL keyCode:WORD
+    LOCAL endMenuCursor:BYTE
+    
+REDRAW_END_MENU:
+    mov endMenuCursor, 0
+    
+    ; 設定選單顏色為白底黑字
+    mov eax, black + (white * 16)
+    call SetTextColor
+    
+    ; 繪製選單選項
+    mov dh, 18
+    mov dl, 25
+    call Gotoxy
+    mov edx, OFFSET endMenuTitle
+    call WriteString
+    
+    mov dh, 20
+    mov dl, 28
+    call Gotoxy
+    mov edx, OFFSET endMenuOption1
+    call WriteString
+    
+    mov dh, 21
+    mov dl, 28
+    call Gotoxy
+    mov edx, OFFSET endMenuOption2
+    call WriteString
+    
+    mov dh, 22
+    mov dl, 28
+    call Gotoxy
+    mov edx, OFFSET endMenuOption3
+    call WriteString
+    
+    mov dh, 24
+    mov dl, 18
+    call Gotoxy
+    mov edx, OFFSET menuPrompt
+    call WriteString
+    
+    ; 繪製初始箭頭
+    mov dh, 20
+    mov dl, 25
+    call Gotoxy
+    mov edx, OFFSET menuArrow
+    call WriteString
+    
+END_MENU_WAIT:
+    mov eax, 50
+    call Delay
+    call ReadKey
+    jz END_MENU_WAIT
+    
+    mov keyCode, ax
+    movzx eax, endMenuCursor
+    mov oldCursor, al
+    
+    mov ax, keyCode
+    cmp ax, 4800h       ; Up Arrow
+    je END_MENU_UP
+    cmp ax, 5000h       ; Down Arrow
+    je END_MENU_DOWN
+    cmp al, 13          ; Enter
+    je END_MENU_SELECT
+    jmp END_MENU_WAIT
+    
+END_MENU_UP:
+    movzx eax, endMenuCursor
+    cmp eax, 0
+    je END_MENU_WAIT
+    dec endMenuCursor
+    call FlushKeyBuffer
+    jmp END_UPDATE_CURSOR
+    
+END_MENU_DOWN:
+    movzx eax, endMenuCursor
+    cmp eax, 2          ; 只有3個選項 (0-2)
+    jge END_MENU_WAIT
+    inc endMenuCursor
+    call FlushKeyBuffer
+    jmp END_UPDATE_CURSOR
+    
+END_UPDATE_CURSOR:
+    ; 清除舊箭頭
+    movzx eax, oldCursor
+    add al, 20
+    mov dh, al
+    mov dl, 25
+    call Gotoxy
+    mov edx, OFFSET twoSpaces
+    call WriteString
+    
+    ; 繪製新箭頭
+    movzx eax, endMenuCursor
+    add al, 20
+    mov dh, al
+    mov dl, 25
+    call Gotoxy
+    mov edx, OFFSET menuArrow
+    call WriteString
+    jmp END_MENU_WAIT
+    
+END_MENU_SELECT:
+    movzx eax, endMenuCursor
+    cmp eax, 0
+    je RESTART_GAME
+    cmp eax, 1
+    je SHOW_HELP_FROM_END
+    cmp eax, 2
+    je EXIT_GAME_FROM_END
+    
+RESTART_GAME:
+    ; 恢復預設顏色
+    mov eax, white + (black * 16)
+    call SetTextColor
+    
+    ; 重新開始遊戲，重置所有變數
+    mov life, 10
+    mov money, 50
+    mov cur_round, 1
+    mov gameOver, 0
+    mov towerCount, 0
+    mov startWave, 0
+    mov menuState, 0
+    
+    ; 清空塔陣列
+    mov ecx, towerMax
+    xor eax, eax
+    lea edi, towersPosX
+CLEAR_TOWERS_X:
+    mov WORD PTR [edi], ax
+    add edi, 2
+    loop CLEAR_TOWERS_X
+    
+    mov ecx, towerMax
+    lea edi, towersPosY
+CLEAR_TOWERS_Y:
+    mov WORD PTR [edi], ax
+    add edi, 2
+    loop CLEAR_TOWERS_Y
+    
+    mov ecx, towerMax
+    lea edi, towersType
+CLEAR_TOWERS_TYPE:
+    mov BYTE PTR [edi], 0
+    inc edi
+    loop CLEAR_TOWERS_TYPE
+    
+    ; 重新初始化地圖
+    call initMapSystem
+    call Clrscr
+    
+    ; 不要直接返回，應該跳出到主程式重新開始
+    ; 設定特殊返回值表示要重啟
+    mov eax, 999  ; 特殊代碼表示重啟
+    ret
+    
+SHOW_HELP_FROM_END:
+    call showHowToPlay
+    
+    ; 返回選單前清空螢幕
+    call Clrscr
+    
+    jmp REDRAW_END_MENU  ; 返回選單並重新繪製
+    
+EXIT_GAME_FROM_END:
+    ; 恢復預設顏色
+    mov eax, white + (black * 16)
+    call SetTextColor
+    mov gameOver, 1
+    mov eax, 0  ; 正常退出代碼
+    ret
+    
+endGameMenu ENDP
 
 ; =================================================================================
 ; 繪製大數字 (3x3 ASCII Art)
@@ -712,6 +937,52 @@ drawBigLetter PROC USES eax ebx ecx edx esi, letter:DWORD, posX:DWORD, posY:DWOR
         lea esi, bigLetterR
     .ELSEIF eax == 'L'
         lea esi, bigLetterL
+    .ELSEIF eax == 'A'
+        lea esi, bigLetterA
+    .ELSEIF eax == 'B'
+        lea esi, bigLetterB
+    .ELSEIF eax == 'C'
+        lea esi, bigLetterC
+    .ELSEIF eax == 'D'
+        lea esi, bigLetterD
+    .ELSEIF eax == 'E'
+        lea esi, bigLetterE
+    .ELSEIF eax == 'F'
+        lea esi, bigLetterF
+    .ELSEIF eax == 'G'
+        lea esi, bigLetterG
+    .ELSEIF eax == 'H'
+        lea esi, bigLetterH
+    .ELSEIF eax == 'I'
+        lea esi, bigLetterI
+    .ELSEIF eax == 'J'
+        lea esi, bigLetterJ
+    .ELSEIF eax == 'K'
+        lea esi, bigLetterK
+    .ELSEIF eax == 'N'
+        lea esi, bigLetterN
+    .ELSEIF eax == 'O'
+        lea esi, bigLetterO
+    .ELSEIF eax == 'P'
+        lea esi, bigLetterP
+    .ELSEIF eax == 'Q'
+        lea esi, bigLetterQ
+    .ELSEIF eax == 'S'
+        lea esi, bigLetterS
+    .ELSEIF eax == 'T'
+        lea esi, bigLetterT
+    .ELSEIF eax == 'U'
+        lea esi, bigLetterU
+    .ELSEIF eax == 'V'
+        lea esi, bigLetterV
+    .ELSEIF eax == 'W'
+        lea esi, bigLetterW
+    .ELSEIF eax == 'X'
+        lea esi, bigLetterX
+    .ELSEIF eax == 'Y'
+        lea esi, bigLetterY
+    .ELSEIF eax == 'Z'
+        lea esi, bigLetterZ
     .ELSE
         ret  ; 無效字母
     .ENDIF
@@ -805,6 +1076,63 @@ drawGameStats PROC USES eax ebx ecx edx
     
     ret
 drawGameStats ENDP
+
+; =================================================================================
+; 繪製字串 (使用 pixel art 字母和數字)
+; 參數: pStr - 字串指標 (以 0 結尾)
+;       startX - 起始 X 座標
+;       startY - 起始 Y 座標
+; 規則: 字母/數字之間 1 個空格
+;       字串中的空格字元渲染為 3 個空格
+; =================================================================================
+drawString PROC USES eax ebx ecx edx esi, pStr:DWORD, startX:DWORD, startY:DWORD
+    LOCAL currentX:DWORD
+    
+    mov esi, pStr
+    mov eax, startX
+    mov currentX, eax
+    
+DRAW_CHAR_LOOP:
+    ; 讀取當前字元
+    movzx eax, BYTE PTR [esi]
+    test al, al
+    jz DRAW_STRING_END  ; 遇到 0 結束
+    
+    ; 檢查是否為空格
+    cmp al, ' '
+    je HANDLE_SPACE
+    
+    ; 檢查是否為數字 (0-9)
+    cmp al, '0'
+    jl HANDLE_LETTER
+    cmp al, '9'
+    jg HANDLE_LETTER
+    
+    ; 繪製數字 (單一數字)
+    sub al, '0'         ; 轉換為 0-9
+    movzx eax, al
+    INVOKE drawBigNumber, eax, currentX, startY
+    add currentX, 4     ; 數字寬度3 + 間距1
+    jmp NEXT_CHAR
+    
+HANDLE_LETTER:
+    ; 繪製字母
+    movzx eax, BYTE PTR [esi]
+    INVOKE drawBigLetter, eax, currentX, startY
+    add currentX, 6     ; 字母寬度5 + 間距1
+    jmp NEXT_CHAR
+    
+HANDLE_SPACE:
+    ; 字串中的空格 = 3 個空格
+    add currentX, 3
+    
+NEXT_CHAR:
+    inc esi
+    jmp DRAW_CHAR_LOOP
+    
+DRAW_STRING_END:
+    ret
+drawString ENDP
 
 ; =================================================================================
 ; 繪製常駐側邊選單 (Tower Selection UI)
@@ -1394,6 +1722,13 @@ SKIP_COMBAT_LOGIC:
     .IF life == 0
         mov gameOver, 1   ; 設置遊戲結束標誌
         ret               ; 返回主程式
+    .ENDIF
+    
+    ; =========================================================
+    ; 勝利檢測 - 檢查是否達到第21回合
+    ; =========================================================
+    .IF cur_round >= 21
+        ret               ; 返回主程式，由主程式顯示YOU WIN
     .ENDIF
     ; =========================================================
 	

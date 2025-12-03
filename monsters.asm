@@ -672,7 +672,18 @@ monDead:
     jmp processMonData
 
 monArrive:
-	;待新增怪物抵達終點懲罰
+	; 怪物抵達終點懲罰 - 扣除生命值
+	mov eax, life
+	dec eax
+	mov life, eax
+	
+	; 檢查生命值是否歸零
+	cmp eax, 0
+	jle triggerGameOver
+	jmp processMonData
+	
+triggerGameOver:
+	mov gameOver, 1
 	
 processMonData:
 	mov (Monster_status PTR [edi]).Speed, 0
