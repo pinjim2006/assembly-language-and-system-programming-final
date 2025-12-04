@@ -629,6 +629,7 @@ showGameOver PROC USES edx
     call SetTextColor
     
     ; 顯示結束遊戲選單並返回其結果
+    mov eax, 0  ; 參數: 0 表示 GameOver 畫面
     call endGameMenu
     ; eax 已包含 endGameMenu 的返回值 (999=restart, 0=exit)
     
@@ -654,6 +655,7 @@ showYouWin PROC USES edx
     call SetTextColor
     
     ; 顯示結束遊戲選單並返回其結果
+    mov eax, 1  ; 參數: 1 表示 YouWin 畫面
     call endGameMenu
     ; eax 已包含 endGameMenu 的返回值 (999=restart, 0=exit)
     
@@ -668,6 +670,11 @@ endGameMenu PROC USES ebx ecx edx
     LOCAL oldCursor:BYTE
     LOCAL keyCode:WORD
     LOCAL endMenuCursor:BYTE
+    LOCAL isWinScreen:BYTE  ; 0=GameOver, 1=YouWin
+    
+    ; 從參數判斷是哪個畫面 (透過 eax 傳入)
+    ; 呼叫前: eax=0 表示 GameOver, eax=1 表示 YouWin
+    mov isWinScreen, al
     
 REDRAW_END_MENU:
     mov endMenuCursor, 0
@@ -827,10 +834,33 @@ CLEAR_TOWERS_TYPE:
 SHOW_HELP_FROM_END:
     call showHowToPlay
     
-    ; 返回選單前清空螢幕
+    ; 返回選單前清空螢幕並重新繪製標題
     call Clrscr
     
-    jmp REDRAW_END_MENU  ; 返回選單並重新繪製
+    ; 根據 isWinScreen 重新繪製對應的標題
+    movzx eax, isWinScreen
+    cmp eax, 1
+    je REDRAW_WIN_TITLE
+    
+REDRAW_GAMEOVER_TITLE:
+    ; 設定顏色為紅底白字
+    mov eax, red + (white * 16)
+    call SetTextColor
+    
+    ; 繪製 GAME OVER
+    mov edx, OFFSET gameOverText
+    INVOKE drawString, edx, 35, 10
+    jmp REDRAW_END_MENU
+    
+REDRAW_WIN_TITLE:
+    ; 設定顏色為黃底黑字
+    mov eax, black + (yellow * 16)
+    call SetTextColor
+    
+    ; 繪製 YOU WIN
+    mov edx, OFFSET youWinText
+    INVOKE drawString, edx, 35, 10
+    jmp REDRAW_END_MENU
     
 EXIT_GAME_FROM_END:
     ; 恢復預設顏色
@@ -1700,7 +1730,7 @@ AFTER_DRAW:
     jne SKIP_COMBAT_LOGIC     ; 如果是 0,跳過怪物更新
     
     ; --- 戰鬥中邏輯 (每一幀執行) ---
-    	 
+    
     call ctrlDraw
     
     ; [註] 需在 monsters.asm 實作: 若 monsterCount == 0, 設 startWave = 0
@@ -1801,8 +1831,48 @@ END_INPUT_CHECK:
             call drawAllTowers
             call drawSideMenu
         .ELSEIF eax == 2  ; Restart
+            ; 重置遊戲狀態變數
+            mov life, 10
+            mov money, 50
+            mov cur_round, 1
+            mov gameOver, 0
             mov towerCount, 0
-            mov startWave, 0      ; 重置狀態
+            mov startWave, 0
+            mov menuState, 0
+            
+            ; 清空塔陣列
+            push ecx
+            push edi
+            push eax
+            
+            mov ecx, towerMax
+            xor eax, eax
+            lea edi, towersPosX
+        CLEAR_ESC_TOWERS_X:
+            mov WORD PTR [edi], ax
+            add edi, 2
+            loop CLEAR_ESC_TOWERS_X
+            
+            mov ecx, towerMax
+            lea edi, towersPosY
+        CLEAR_ESC_TOWERS_Y:
+            mov WORD PTR [edi], ax
+            add edi, 2
+            loop CLEAR_ESC_TOWERS_Y
+            
+            mov ecx, towerMax
+            lea edi, towersType
+        CLEAR_ESC_TOWERS_TYPE:
+            mov BYTE PTR [edi], 0
+            inc edi
+            loop CLEAR_ESC_TOWERS_TYPE
+            
+            pop eax
+            pop edi
+            pop ecx
+            
+            ; 重新初始化地圖
+            call initMapSystem
             INVOKE SetConsoleTextAttribute, outputHandle, 0F0h 
             call Clrscr
             call outerBox
