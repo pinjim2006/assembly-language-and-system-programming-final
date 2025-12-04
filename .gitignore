@@ -13,3 +13,6 @@ windbg.*
 ml.*
 /suggestions
 *.bak
+
+!constants.inc
+!data.inc
