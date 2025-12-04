@@ -999,25 +999,25 @@ drawSideMenuCursor PROC USES eax
     je SHOW_NAME_E
     jmp SKIP_NAME
 SHOW_NAME_A:
-    INVOKE WriteConsoleOutputAttribute, outputHandle, ADDR attrMenuName, 7, sideMenuCursorPos, ADDR cellsWritten
-    INVOKE WriteConsoleOutputCharacter, outputHandle, ADDR strNameA, 7, sideMenuCursorPos, ADDR count
+    INVOKE WriteConsoleOutputAttribute, outputHandle, ADDR attrMenuName, 12, sideMenuCursorPos, ADDR cellsWritten
+    INVOKE WriteConsoleOutputCharacter, outputHandle, ADDR strNameA, 12, sideMenuCursorPos, ADDR count
     jmp SKIP_NAME
     ; ... (重複結構針對不同塔名) ...
 SHOW_NAME_B:
-    INVOKE WriteConsoleOutputAttribute, outputHandle, ADDR attrMenuName, 7, sideMenuCursorPos, ADDR cellsWritten
-    INVOKE WriteConsoleOutputCharacter, outputHandle, ADDR strNameB, 7, sideMenuCursorPos, ADDR count
+    INVOKE WriteConsoleOutputAttribute, outputHandle, ADDR attrMenuName, 12, sideMenuCursorPos, ADDR cellsWritten
+    INVOKE WriteConsoleOutputCharacter, outputHandle, ADDR strNameB, 12, sideMenuCursorPos, ADDR count
     jmp SKIP_NAME
 SHOW_NAME_C:
-    INVOKE WriteConsoleOutputAttribute, outputHandle, ADDR attrMenuName, 7, sideMenuCursorPos, ADDR cellsWritten
-    INVOKE WriteConsoleOutputCharacter, outputHandle, ADDR strNameC, 7, sideMenuCursorPos, ADDR count
+    INVOKE WriteConsoleOutputAttribute, outputHandle, ADDR attrMenuName, 12, sideMenuCursorPos, ADDR cellsWritten
+    INVOKE WriteConsoleOutputCharacter, outputHandle, ADDR strNameC, 12, sideMenuCursorPos, ADDR count
     jmp SKIP_NAME
 SHOW_NAME_D:
-    INVOKE WriteConsoleOutputAttribute, outputHandle, ADDR attrMenuName, 7, sideMenuCursorPos, ADDR cellsWritten
-    INVOKE WriteConsoleOutputCharacter, outputHandle, ADDR strNameD, 7, sideMenuCursorPos, ADDR count
+    INVOKE WriteConsoleOutputAttribute, outputHandle, ADDR attrMenuName, 12, sideMenuCursorPos, ADDR cellsWritten
+    INVOKE WriteConsoleOutputCharacter, outputHandle, ADDR strNameD, 12, sideMenuCursorPos, ADDR count
     jmp SKIP_NAME
 SHOW_NAME_E:
-    INVOKE WriteConsoleOutputAttribute, outputHandle, ADDR attrMenuName, 7, sideMenuCursorPos, ADDR cellsWritten
-    INVOKE WriteConsoleOutputCharacter, outputHandle, ADDR strNameE, 7, sideMenuCursorPos, ADDR count
+    INVOKE WriteConsoleOutputAttribute, outputHandle, ADDR attrMenuName, 12, sideMenuCursorPos, ADDR cellsWritten
+    INVOKE WriteConsoleOutputCharacter, outputHandle, ADDR strNameE, 12, sideMenuCursorPos, ADDR count
 SKIP_NAME:
     ret
 drawSideMenuCursor ENDP
@@ -1038,9 +1038,9 @@ clearSideMenuCursor PROC USES eax
     INVOKE WriteConsoleOutputAttribute, outputHandle, ADDR outerAttributes, 4, sideMenuCursorPos, ADDR cellsWritten
     INVOKE WriteConsoleOutputCharacter, outputHandle, ADDR emptyLine, 4, sideMenuCursorPos, ADDR count
     add sideMenuCursorPos.X, 5
-    ; 覆蓋名稱
-    INVOKE WriteConsoleOutputAttribute, outputHandle, ADDR outerAttributes, 10, sideMenuCursorPos, ADDR cellsWritten
-    INVOKE WriteConsoleOutputCharacter, outputHandle, ADDR emptyLine, 10, sideMenuCursorPos, ADDR count
+    ; 覆蓋名稱（包含價格，需要 12 個字元）
+    INVOKE WriteConsoleOutputAttribute, outputHandle, ADDR outerAttributes, 12, sideMenuCursorPos, ADDR cellsWritten
+    INVOKE WriteConsoleOutputCharacter, outputHandle, ADDR emptyLine, 12, sideMenuCursorPos, ADDR count
     ret
 clearSideMenuCursor ENDP
 
@@ -1677,10 +1677,25 @@ addTowerWithType PROC USES eax ecx esi
     cmp eax, towerMax
     jge NO_ADD_TYPE
     
-    ; 4. 寫入資料陣列
-    mov ecx, eax
+    ; 4. 檢查金錢是否足夠
+    mov eax, 0
+    mov al, bl              ; bl 包含塔的類型 (1-5)
+    dec eax                 ; 轉換為陣列索引 (0-4)
+    mov esi, OFFSET towerCosts
+    imul eax, 4             ; DWORD = 4 bytes
+    add esi, eax
+    mov eax, DWORD PTR [esi] ; 取得此塔的價格
+    cmp money, eax          ; 比較現有金錢與價格
+    jl NO_ADD_TYPE          ; 金錢不足，無法建造
+    
+    ; 5. 扣除金錢
+    sub money, eax
+    
+    ; 6. 寫入資料陣列
+    mov ecx, towerCount     ; 使用 towerCount 作為索引
     ; 寫入 X
     mov esi, OFFSET towersPosX
+    mov eax, ecx            ; 使用 ecx (towerCount) 而不是被修改的 eax
     imul eax, 2
     add esi, eax
     mov ax, blockPos.X
@@ -1754,6 +1769,20 @@ CHECK_TOWER_LOOP:
     inc ecx
     jmp CHECK_TOWER_LOOP
 DELETE_FOUND_TOWER:
+    ; 取得被刪除塔的類型並計算歸還金錢
+    mov esi, OFFSET towersType
+    add esi, ecx                ; ecx 是塔的索引
+    mov al, BYTE PTR [esi]      ; 取得塔類型 (1-5)
+    mov ebx, 0
+    mov bl, al
+    dec ebx                     ; 轉換為陣列索引 (0-4)
+    mov esi, OFFSET towerCosts
+    imul ebx, 4                 ; DWORD = 4 bytes
+    add esi, ebx
+    mov eax, DWORD PTR [esi]    ; 取得原價格
+    shr eax, 1                  ; 除以 2 (一半價格)
+    add money, eax              ; 歸還一半金錢
+    
     call removeTowerAtIndexSimple
 DELETE_DONE:
     ret

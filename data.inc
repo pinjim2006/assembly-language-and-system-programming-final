@@ -53,18 +53,18 @@ attrTowerD      WORD blockWidth DUP(0F0h)
 attrTowerE      WORD blockWidth DUP(0F0h) 
 
 ; --- 塔的名稱字串 (顯示在選單旁) ---
-strNameA        BYTE "Cannon ", 0
-strNameB        BYTE "Sniper ", 0
-strNameC        BYTE "Ice    ", 0  
-strNameD        BYTE "Mage   ", 0
-strNameE        BYTE "Missile", 0 
+strNameA        BYTE "Cannon ($10)", 0
+strNameB        BYTE "Sniper ($15)", 0
+strNameC        BYTE "Ice    ($20)", 0  
+strNameD        BYTE "Mage   ($25)", 0
+strNameE        BYTE "Missile($30)", 0 
 
 ; --- 側邊選單游標樣式 ---
 attrMenuCursor  WORD 4 DUP(0C0h) ; 紅底黑字 (C0h)
 menuCursorStr   BYTE " << "
 
 ; --- 選單文字屬性 ---
-attrMenuName    WORD 10 DUP(0F0h)
+attrMenuName    WORD 12 DUP(0F0h)
 
 ; --- 繪圖暫存緩衝區 ---
 tempBuffer      BYTE blockWidth DUP(?)
@@ -131,11 +131,15 @@ helpTitle       BYTE "========== HOW TO PLAY ==========", 0
 helpLine1       BYTE "Arrow Keys: Move cursor", 0
 helpLine2       BYTE "F: Select tower (use up and down arrow keys)", 0
 helpLine3       BYTE "ENTER: Build tower", 0
-helpLine4       BYTE "X: Delete tower", 0
+helpLine4       BYTE "X: Delete tower (get half money back)", 0
 helpLine5       BYTE "G: Start round", 0
 helpLine6       BYTE "ESC: Open menu", 0
 helpLine7       BYTE "Towers can only be placed on empty tiles", 0
 helpPrompt      BYTE "Press any key to continue...", 0
+
+; 金錢系統提示訊息
+insufficientMoneyMsg BYTE "Not enough money!", 0
+moneyReturnedMsg     BYTE "Money returned!", 0
 
 ; 大數字/字母 ASCII 圖形 (3x3 格式)
 ; 數字 0-9 (每個 9 bytes = 3行 x 3字元)
