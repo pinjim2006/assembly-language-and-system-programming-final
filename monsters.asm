@@ -202,7 +202,7 @@ timeCounter     DWORD 0 		; 計算生怪延遲時間
 xyPosition      COORD <>		; 暫存座標
 charBuf         BYTE 15 DUP(?)	; 暫存圖像資料
 bytesWritten    DWORD ? 
-monsterCount	BYTE 0    		; 計算場上怪獸數  
+monsterCount	DWORD 0    		; 計算場上怪獸數  
 
 .code
 
@@ -215,6 +215,7 @@ createMonsters PROC USES eax ebx ecx edx esi edi, roundVal:DWORD
     mov esi, OFFSET RoundsTable
     mov edi, 1        ; round index
     xor eax, eax      ; 用作累加offset
+	
 
 findRoundStart:
     mov edx, roundVal
@@ -228,6 +229,7 @@ findRoundStart:
 
 roundFound:
     movzx ecx, byte ptr [esi]       ; 讀該回合怪物數量 (BYTE)
+	mov monsterCount, ecx	;設置該回合怪的數量
     inc esi             ; 指向第一個怪物ID
     xor ebx, ebx        ; EBX = roundMonsters 陣列索引
 
@@ -332,9 +334,6 @@ findSet:
 	
 setDraw:
 	mov (Monster_status PTR [edi]).alrearyDraw, 1
-	;mov dl, monsterCount    <---------------------------------(施工中)
-	;inc dl
-	;mov monsterCount, dl
 	jmp callPROC
 	
 storeCounter:
@@ -688,18 +687,19 @@ triggerGameOver:
 processMonData:
 	mov (Monster_status PTR [edi]).Speed, 0
 	;(施工中)
-	;mov dl, monsterCount
-	;dec dl
-	;mov monsterCount, dl
-	;cmp dl, 0
-	;ja nextMon
+	mov edx, monsterCount
+	sub edx, 1
+	mov monsterCount, edx
+	cmp edx, 0
+	ja nextMon
 	
 ; 判斷回合結束與否	(施工中)
 endWave:
-	;mov startWave, 0
-	;mov dl, cur_round
-	;inc dl
-	;mov cur_round, dl
+	mov startWave, 0	; monsterCount==0 -> 回合結束
+	mov menuState, 0
+	mov edx, cur_round	; round++
+	add edx, 1
+	mov cur_round, edx
 
 nextMon:            
     inc ebx
