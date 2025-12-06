@@ -1,6 +1,7 @@
 ; =================================================================================
 ; tower.asm
 ; 負責：防禦塔繪製、建造、拆除、以及子彈系統
+; [修正] 全面改用 constants.inc 定義的 MAP_WIDTH/MAP_HEIGHT，解決邊界與索引錯誤
 ; =================================================================================
 
 addTowerWithType PROTO      ; 在當前位置新增防禦塔
@@ -23,7 +24,7 @@ _restoreBulletBG PROTO
 .code
 
 ; =================================================================================
-; 建造防禦塔 (從 main.asm 移來)
+; 建造防禦塔
 ; =================================================================================
 addTowerWithType PROC USES eax ecx esi
     ; 1. 檢查是否重疊
@@ -82,7 +83,7 @@ NO_ADD_TYPE:
 addTowerWithType ENDP
 
 ; =================================================================================
-; 刪除塔 (從 main.asm 移來)
+; 刪除塔
 ; =================================================================================
 deleteTower PROC USES eax ebx ecx esi
     cmp towerCount, 0
@@ -243,32 +244,38 @@ JUST_DECREASE_COUNT_SIMPLE:
     ret
 removeTowerAtIndexSimple ENDP
 
-; 輔助：檢查地形
+; =================================================================================
+; 輔助：檢查地形 [關鍵修正區]
+; =================================================================================
 canPlaceTowerAtCurrentPos PROC USES ebx ecx esi
     movzx eax, blockPos.X
     sub eax, 7
     mov ebx, blockWidth
     xor edx, edx
     div ebx
-    mov ebx, eax
+    mov ebx, eax    ; ebx = Grid X
+    
     movzx eax, blockPos.Y
     sub eax, 4
     mov ecx, blockHeight
     xor edx, edx
-    div ecx
+    div ecx         ; eax = Grid Y
     
-    cmp ebx, 15 ; MAP_WIDTH
+    ; [修正] 使用常數 MAP_WIDTH (16) 與 MAP_HEIGHT (8)
+    cmp ebx, MAP_WIDTH
     jge CANNOT_PLACE
-    cmp eax, 7  ; MAP_HEIGHT
+    cmp eax, MAP_HEIGHT
     jge CANNOT_PLACE
     
-    mov ecx, 15 ; MAP_WIDTH
+    ; [修正] 計算索引必須使用 MAP_WIDTH
+    mov ecx, MAP_WIDTH 
     mul ecx
     add eax, ebx
     mov esi, OFFSET mapData
     add esi, eax
     mov al, BYTE PTR [esi]
-    cmp al, 0 ; COMPONENT_EMPTY
+    
+    cmp al, COMPONENT_EMPTY ; 0
     je CAN_PLACE 
 CANNOT_PLACE:
     mov eax, 0
@@ -344,11 +351,7 @@ DRAW_TOWER_DONE:
     ret 4 
 drawTower ENDP
 
-; 具體的繪製 A-E 塔函式 (直接從 main.asm 複製過來)
-; 為了節省空間，請確保將 main.asm 中的 drawATower 到 drawETower 完整剪下貼上到這裡
-; 這裡僅列出函數頭
 drawATower PROC USES esi
-    ; ... (Paste content from main.asm) ...
     mov esi, OFFSET attrTowerA 
     INVOKE WriteConsoleOutputAttribute, outputHandle, esi, blockWidth, outerBoxPos, ADDR cellsWritten
     mov tempBuffer, 20h     ; ' '
@@ -379,7 +382,6 @@ drawATower PROC USES esi
 drawATower ENDP
 
 drawBTower PROC USES esi
-    ; ... (Paste content from main.asm) ...
     mov esi, OFFSET attrTowerB
     INVOKE WriteConsoleOutputAttribute, outputHandle, esi, blockWidth, outerBoxPos, ADDR cellsWritten
     mov tempBuffer, 20h     
@@ -410,7 +412,6 @@ drawBTower PROC USES esi
 drawBTower ENDP
 
 drawCTower PROC USES esi
-    ; ... (Paste content from main.asm) ...
     mov esi, OFFSET attrTowerC
     INVOKE WriteConsoleOutputAttribute, outputHandle, esi, blockWidth, outerBoxPos, ADDR cellsWritten
     mov tempBuffer, 20h     
@@ -441,7 +442,6 @@ drawCTower PROC USES esi
 drawCTower ENDP
 
 drawDTower PROC USES esi
-    ; ... (Paste content from main.asm) ...
     mov esi, OFFSET attrTowerD
     INVOKE WriteConsoleOutputAttribute, outputHandle, esi, blockWidth, outerBoxPos, ADDR cellsWritten
     mov tempBuffer, 20h
@@ -472,7 +472,6 @@ drawDTower PROC USES esi
 drawDTower ENDP
 
 drawETower PROC USES esi
-    ; ... (Paste content from main.asm) ...
     mov esi, OFFSET attrTowerC
     INVOKE WriteConsoleOutputAttribute, outputHandle, esi, blockWidth, outerBoxPos, ADDR cellsWritten
     mov tempBuffer, 20h     
@@ -503,7 +502,7 @@ drawETower PROC USES esi
 drawETower ENDP
 
 ; =================================================================================
-; 戰鬥與子彈系統 (從 monsters.asm 移來)
+; 戰鬥與子彈系統
 ; =================================================================================
 
 towerCombatSystem PROC USES eax ebx ecx edx esi edi
@@ -569,13 +568,10 @@ MONSTER_LOOP:
     jge NEXT_TOWER
 
     ; 存取 roundMonsters (24 bytes per struct)
-    mov eax, SIZE Monster_status ; SIZE Monster_status
+    mov eax, SIZE Monster_status
     mul mIndex
     lea edi, roundMonsters[eax]
 
-    ; [OFFSET 計算]
-    ; HP=0 (WORD), alrearyDraw=12 (BYTE), pos.X=4 (WORD), pos.Y=6 (WORD)
-    
     ; 檢查存活 (HP > 0)
     cmp WORD PTR [edi], 0 
     jle NEXT_MONSTER
@@ -665,8 +661,6 @@ ALL_TOWERS_DONE:
 towerCombatSystem ENDP
 
 
-
-
 updateBullets PROC USES eax ebx ecx edx esi edi
     mov ecx, 0  
 
@@ -693,7 +687,7 @@ SKIP_CLEAR:
 
     ; 2. 取得目標怪物
     mov edx, (Bullet PTR [esi]).targetID
-    mov eax, SIZE Monster_status ; SIZE Monster_status
+    mov eax, SIZE Monster_status
     mul edx
     lea edi, roundMonsters[eax] 
 
@@ -799,8 +793,6 @@ BULLET_DONE:
     ret
 updateBullets ENDP
 
-
-
 clearAllBullets PROC USES eax ebx ecx
     mov ecx, 0
 CLEAR_BULLET_LOOP:
@@ -833,8 +825,9 @@ CLEAR_BULLET_RET:
     ret
 clearAllBullets ENDP
 
-
-
+; =================================================================================
+; 還原子彈背景 [關鍵修正區]
+; =================================================================================
 _restoreBulletBG PROC USES eax ebx ecx edx esi edi
     ; 1. 檢查該位置是否有塔
     mov ecx, 0
@@ -902,7 +895,7 @@ NO_TOWER_HERE:
     xor edx, edx
     div ebx         
     mov ebx, eax        ; EBX = Grid X
-    push edx            ; [Stack +1] 保存 X 軸像素偏移 (Pixel Offset X)
+    push edx            ; [Stack +1] 保存 X 軸像素偏移
 
     ; 計算 Grid Y
     movzx eax, xyPosition.Y
@@ -911,17 +904,16 @@ NO_TOWER_HERE:
     xor edx, edx
     div ecx             ; EAX = Grid Y, EDX = Pixel Offset Y
     
-    ; 邊界檢查
-    cmp ebx, 15 ; MAP_WIDTH
+    ; [修正] 使用常數 MAP_WIDTH / MAP_HEIGHT
+    cmp ebx, MAP_WIDTH 
     jge RESTORE_ABORT
-    cmp eax, 7  ; MAP_HEIGHT
+    cmp eax, MAP_HEIGHT  
     jge RESTORE_ABORT
     
-    ; 保存 Y 軸像素偏移
-    push edx            ; [Stack +2] 保存 Y 軸像素偏移 (Pixel Offset Y)
+    push edx            ; [Stack +2] 保存 Y 軸像素偏移
 
-    ; 取得地圖元件 ID (Map Char)
-    mov ecx, 15 ; MAP_WIDTH
+    ; [修正] 計算索引必須使用 MAP_WIDTH
+    mov ecx, MAP_WIDTH  
     mul ecx
     add eax, ebx    
     mov edi, OFFSET mapData
@@ -930,20 +922,20 @@ NO_TOWER_HERE:
     
     ; 計算 componentChars 的起始地址
     movzx eax, bl   
-    mov edx, 15     ; 每個元件 15 bytes
+    mov edx, 15     ; 每個元件 15 bytes (這是圖形資料大小，不是地圖寬度，不用改)
     mul edx         
     mov edi, OFFSET componentChars
-    add edi, eax    ; EDI = 元件圖形基底地址
+    add edi, eax    
     
     ; 加上 Y 軸像素偏移
     pop eax         ; [Stack -1] 取出 Pixel Offset Y
-    mov edx, 5      ; 每一行 5 bytes
+    mov edx, 5      
     mul edx         
     add edi, eax    
     
     ; 加上 X 軸像素偏移
-    pop eax         ; [Stack -2] 取出 Pixel Offset X -> 堆疊平衡恢復
-    add edi, eax    ; EDI 現在指向正確的單一字元地址
+    pop eax         ; [Stack -2] 取出 Pixel Offset X
+    add edi, eax    
 
     ; 繪製該字元
     INVOKE WriteConsoleOutputCharacter, outputHandle, edi, 1, xyPosition, ADDR count
@@ -953,8 +945,8 @@ RESTORE_FINISH:
     ret
 
 RESTORE_ABORT:
-    ; 錯誤處理：如果因為邊界檢查跳到這裡，堆疊中還有資料，必須清除！
-    pop edx ; 清除 Stack 中的 X Offset
+    ; 錯誤處理：清除 Stack
+    pop edx 
     
     mov al, ' '
     mov charBuf, al 
@@ -962,3 +954,4 @@ RESTORE_ABORT:
     INVOKE WriteConsoleOutputAttribute, outputHandle, ADDR blockAttributes, 1, xyPosition, ADDR bytesWritten
     ret
 _restoreBulletBG ENDP
+END
