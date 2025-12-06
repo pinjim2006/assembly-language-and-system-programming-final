@@ -667,12 +667,16 @@ check:
     jmp monArrive
 
 monDead:
-	; 怪物擊殺報酬 - 增加對應之金錢報酬 
-	mov eax, money
-	add eax, (Monster_status PTR [edi]).Reward
-	mov money, eax
+    ; 怪物擊殺報酬 - 增加對應之金錢報酬 
+    mov eax, money
+    
+    ; [修正] 由於 Reward 是 BYTE，eax 是 DWORD，不能直接相加。
+    ; 必須先將 Reward 擴展 (Zero-Extend) 到暫存器 (如 ecx)
+    movzx ecx, (Monster_status PTR [edi]).Reward 
+    add eax, ecx
+    
+    mov money, eax
     jmp processMonData
-
 monArrive:
 	; 怪物抵達終點懲罰 - 扣除生命值
 	mov eax, life
