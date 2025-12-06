@@ -62,7 +62,7 @@ Monster_status STRUCT
     pos         COORD <?, ?>    ; 初始座標 (4 bytes)
 	prev_pos    COORD <?, ?>	; 現在座標(清殘影用)
 	alrearyDraw BYTE 0			; 判斷是否生成(0:尚未/1:已生成)
-	moveCounter	BYTE 0			; 加到100就移動
+	moveCounter	BYTE 0			; 加到10就移動
     Direction   BYTE ?          ; 判斷移動方向
     Chars       BYTE 15 DUP(?)  ; 5x3 圖像 
 Monster_status ENDS
@@ -219,7 +219,6 @@ monsterCount	DWORD 0    		; 計算場上怪獸數
 ; ------------------------------------------------
 ; 尋找該回合要生成的怪物
 ; ------------------------------------------------
-; [修正] 參數 roundVal 直接寫在 PROC 後面
 createMonsters PROC USES eax ebx ecx edx esi edi, roundVal:DWORD
     
     mov esi, OFFSET RoundsTable
@@ -246,7 +245,7 @@ roundFound:
 initData:
     movzx eax, byte ptr [esi+ebx]   ; 讀怪物ID，擴展到 EAX
     
-    ; [修正] 移除無效的 [ebx*SIZE] 定址，改用手動計算
+    ;手動計算怪物索引
     push eax
     mov eax, SIZE Monster_status
     mul ebx     ; eax = ebx * 24
@@ -265,7 +264,7 @@ createMonsters ENDP
 ; ------------------------------------------------
 ; 初始化怪物數據
 ; ------------------------------------------------  
-; [修正] 參數直接寫在 PROC 後面
+
 initMonsterData PROC USES eax ebx ecx edx esi edi, monsterID:DWORD, pOut:PTR Monster_status 
 
     mov eax, monsterID
@@ -274,20 +273,20 @@ initMonsterData PROC USES eax ebx ecx edx esi edi, monsterID:DWORD, pOut:PTR Mon
     ; 讀能力值
     mov ebx, OFFSET MonsterTypeTable
     mov ecx, eax
-    ; [修正] 每個怪物 entry 是 4 bytes (WORD+BYTE+BYTE)
+    ; 每個怪物 entry 是 4 bytes (WORD+BYTE+BYTE)
     imul ecx, 4                 
     
     mov edi, pOut
 
-    ; [修正] 讀取 WORD 大小的 HP
+    ; 讀取 WORD 大小的 HP
     mov dx, WORD PTR [ebx+ecx]         
     mov (Monster_status PTR [edi]).HP, dx
 
-    ; [修正] 讀取 Speed (偏移 2)
+    ; 讀取 Speed (偏移 2)
     mov dl, BYTE PTR [ebx+ecx+2]         
     mov (Monster_status PTR [edi]).Speed, dl
 
-    ; [修正] 讀取 Reward (偏移 3)
+    ; 讀取 Reward (偏移 3)
     mov dl, BYTE PTR [ebx+ecx+3]         
     mov (Monster_status PTR [edi]).Reward, dl
     
@@ -793,7 +792,9 @@ nextMon:
     inc ebx
     cmp ebx, 10
     jb check
-    
+ 
+nextRound:
+ 
     ret
 removeMonsters ENDP
 
