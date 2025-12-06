@@ -1,18 +1,33 @@
 .github
 
-*.dll
-*.lib
-*.inc
+# --- 編譯垃圾與暫存檔 ---
 *.obj
 *.exe
-windbg.*
 *.pdb
 *.ilk
 *.log
-*.ink
-ml.*
-/suggestions
 *.bak
+ml.*
+windbg.*
+/suggestions
 
+# --- 修正與新增的忽略項目 ---
+*.lnk      
+# (原本寫 ink 是錯字，改為 lnk 才能忽略 cmd.exe.lnk)
+
+*.lst
+# (忽略組譯清單 main.lst)
+
+*.doc
+# (忽略舊文件 ReadMe.doc)
+
+# --- 函式庫相關 (視需求保留) ---
+*.dll
+*.lib
+
+# --- ⚠️ 原始碼設定注意 ---
+# 你目前的設定是「忽略所有 .inc 檔」，只保留 constants 和 data。
+# 如果你有寫其他 .inc (例如 monsters.inc)，記得要把 *.inc 拿掉，不然會被忽略！
+*.inc
 !constants.inc
 !data.inc
