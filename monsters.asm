@@ -2,6 +2,15 @@
 ; monsters.asm
 ; =================================================================================
 
+; 引用 main.asm 的變數
+EXTERNDEF towersPosX:WORD
+EXTERNDEF towersPosY:WORD
+EXTERNDEF towersType:BYTE
+EXTERNDEF towersCD:BYTE
+EXTERNDEF towerCount:DWORD
+EXTERNDEF towerRangeSq:DWORD
+EXTERNDEF towerDamage:WORD
+EXTERNDEF towerReload:BYTE
 ; ------------------------------------------------
 ; 函式原型宣告 (Prototypes)
 ; ------------------------------------------------
@@ -22,6 +31,7 @@ updateMonstersPositions PROTO
     
 removeMonsters PROTO
 
+towerCombatSystem PROTO
 ; ------------------------------------------------
 ; 常數定義
 ; ------------------------------------------------
@@ -290,6 +300,13 @@ initMonsterData PROC USES eax ebx ecx edx esi edi, monsterID:DWORD, pOut:PTR Mon
     ; 初始化移動方向
     mov dl, map1_InitDirection
     mov (Monster_status PTR [edi]).Direction, dl
+    
+    ; =========================================================
+    ; [新增修正] 重置生成狀態
+    ; 重要！否則第二回合或重玩時，怪物會因為殘留數值瞬間生成
+    ; =========================================================
+    mov (Monster_status PTR [edi]).alrearyDraw, 0  
+    mov (Monster_status PTR [edi]).moveCounter, 0
 
     ; 讀圖像 
     mov ebx, OFFSET MonstersChars
@@ -635,77 +652,142 @@ skip:
 
     ret
 updateMonstersPositions ENDP
-
-; ------------------------------------------------
-; 移除死亡或走到終點的怪
-; ------------------------------------------------  
-
-removeMonsters PROC USES eax ebx edx edi
+; =================================================================================
+; 移除死亡或走到終點的怪 - [修正版]
+; 修正：在怪物被移除 (Speed=0) 前，強制重畫地圖覆蓋該怪物的位置，防止殘影。
+; =================================================================================
+removeMonsters PROC USES eax ebx ecx edx esi edi
 
     xor ebx, ebx
 
 check:
-    ; [修正] 手動計算 Struct Offset
+    ; 手動計算 Struct Offset
     mov eax, SIZE Monster_status
     mul ebx
     lea edi, roundMonsters[eax]
-	
+    
+    ; 如果已經是死怪 (Speed=0)，跳過
     cmp (Monster_status PTR [edi]).Speed, 0       
     je nextMon
     
-	;判斷怪被擊殺
+    ; 判斷怪被擊殺
     cmp (Monster_status PTR [edi]).HP, 0
     jle monDead               
     
-	;判斷怪抵達終點
-	mov dx, monPosEnd.X 
+    ; 判斷怪抵達終點
+    mov dx, monPosEnd.X 
     cmp (Monster_status PTR [edi]).pos.X, dx   
-    jne nextMon	
-	mov dx, monPosEnd.Y
+    jne nextMon 
+    mov dx, monPosEnd.Y
     cmp (Monster_status PTR [edi]).pos.Y, dx      
     jne nextMon
     jmp monArrive
 
 monDead:
-    ; 怪物擊殺報酬 - 增加對應之金錢報酬 
+    ; 怪物擊殺報酬
     mov eax, money
-    
-    ; [修正] 由於 Reward 是 BYTE，eax 是 DWORD，不能直接相加。
-    ; 必須先將 Reward 擴展 (Zero-Extend) 到暫存器 (如 ecx)
     movzx ecx, (Monster_status PTR [edi]).Reward 
     add eax, ecx
-    
     mov money, eax
     jmp processMonData
+
 monArrive:
-	; 怪物抵達終點懲罰 - 扣除生命值
-	mov eax, life
-	dec eax
-	mov life, eax
-	
-	; 檢查生命值是否歸零
-	cmp eax, 0
-	jle triggerGameOver
-	jmp processMonData
-	
+    ; 怪物抵達終點懲罰
+    mov eax, life
+    dec eax
+    mov life, eax
+    
+    ; 檢查生命值是否歸零
+    cmp eax, 0
+    jle triggerGameOver
+    jmp processMonData
+    
 triggerGameOver:
-	mov gameOver, 1
-	
+    mov gameOver, 1
+    
 processMonData:
-	mov (Monster_status PTR [edi]).Speed, 0
-	mov edx, monsterCount
-	sub edx, 1
-	mov monsterCount, edx
-	cmp edx, 0
-	ja nextMon
-	
-; 判斷回合結束與否	
+    ; =========================================================
+    ; [新增修正] 強制清除殘影
+    ; 在將 Speed 設為 0 之前，先把當前位置的地圖畫回來
+    ; =========================================================
+    push eax
+    push ebx
+    push ecx
+    push edx
+    push esi
+    
+    ; 1. 取得當前怪物座標
+    mov ax, (Monster_status PTR [edi]).pos.X
+    mov xyPosition.X, ax
+    mov ax, (Monster_status PTR [edi]).pos.Y
+    mov xyPosition.Y, ax
+
+    ; 2. 計算地圖 Grid X
+    movzx eax, xyPosition.X
+    sub eax, 7
+    mov ebx, blockWidth
+    xor edx, edx
+    div ebx
+    mov ebx, eax 
+
+    ; 3. 計算地圖 Grid Y
+    movzx eax, xyPosition.Y
+    sub eax, 4
+    mov ecx, blockHeight
+    xor edx, edx
+    div ecx 
+
+    ; 4. 取得地圖元件並重畫
+    mov ecx, MAP_WIDTH
+    mul ecx
+    add eax, ebx
+    mov esi, OFFSET mapData
+    add esi, eax
+    mov cl, BYTE PTR [esi] 
+
+    movzx eax, cl
+    mov edx, 15
+    mul edx
+    mov esi, OFFSET componentChars
+    add esi, eax
+
+    mov ecx, blockHeight
+    CLEAR_MONSTER_LOOP:
+        push ecx
+        INVOKE WriteConsoleOutputCharacter, outputHandle, esi, blockWidth, xyPosition, ADDR count
+        INVOKE WriteConsoleOutputAttribute, outputHandle, ADDR blockAttributes, blockWidth, xyPosition, ADDR cellsWritten
+        add esi, blockWidth
+        inc xyPosition.Y
+        pop ecx
+    loop CLEAR_MONSTER_LOOP
+
+    pop esi
+    pop edx
+    pop ecx
+    pop ebx
+    pop eax
+    ; =========================================================
+    ; [結束清除]
+    ; =========================================================
+
+    mov (Monster_status PTR [edi]).Speed, 0
+    mov edx, monsterCount
+    sub edx, 1
+    mov monsterCount, edx
+    cmp edx, 0
+    ja nextMon
+    
+; 判斷回合結束與否  
 endWave:
-	mov startWave, 0	; monsterCount==0 -> 回合結束
-	mov menuState, 0
-	mov edx, cur_round	; round++
-	add edx, 1
-	mov cur_round, edx
+    mov startWave, 0    ; monsterCount==0 -> 回合結束
+    mov menuState, 0
+    mov edx, cur_round  ; round++
+    add edx, 1
+    mov cur_round, edx
+    
+    ; [建議] 回合結束時強制刷新一次所有塔，確保沒有被清除過程誤蓋
+    ; 由於 monsters.asm 無法直接呼叫 main.asm 的 drawAllTowers (除非有 PROTO)
+    ; 但這裡只要清除怪物殘影即可，上方的 CLEAR_MONSTER_LOOP 已經足夠。
 
 nextMon:            
     inc ebx
@@ -715,3 +797,135 @@ nextMon:
     ret
 removeMonsters ENDP
 
+; =================================================================================
+; 防禦塔攻擊系統
+; 遍歷所有塔 -> 檢查冷卻 -> 搜尋最近怪物 -> 攻擊(扣血)
+; =================================================================================
+towerCombatSystem PROC USES eax ebx ecx edx esi edi
+    LOCAL tIndex:DWORD
+    LOCAL mIndex:DWORD
+    LOCAL tX:WORD, tY:WORD, tType:BYTE
+    LOCAL range:DWORD, damage:WORD
+    LOCAL distSq:DWORD
+    
+    mov tIndex, 0
+
+TOWER_LOOP:
+    mov eax, tIndex
+    cmp eax, towerCount
+    jge ALL_TOWERS_DONE
+
+    ; 1. 檢查冷卻時間 (CD)
+    lea esi, towersCD
+    add esi, eax
+    mov al, byte ptr [esi]
+    cmp al, 0
+    jg CD_DECREMENT
+    jmp READY_TO_FIRE
+
+CD_DECREMENT:
+    dec byte ptr [esi] ; CD - 1
+    jmp NEXT_TOWER     ; 還在冷卻，跳過此塔
+
+READY_TO_FIRE:
+    ; 2. 取得此塔的資訊 (座標、類型)
+    ; X
+    mov esi, OFFSET towersPosX
+    mov eax, tIndex
+    imul eax, 2
+    mov bx, word ptr [esi+eax]
+    mov tX, bx
+    ; Y
+    mov esi, OFFSET towersPosY
+    mov eax, tIndex
+    imul eax, 2
+    mov bx, word ptr [esi+eax]
+    mov tY, bx
+    ; Type
+    mov esi, OFFSET towersType
+    mov eax, tIndex
+    add esi, eax
+    mov bl, byte ptr [esi]
+    mov tType, bl
+    
+    ; 3. 查表取得該類型塔的 Range 與 Damage
+    ; 索引 = Type - 1
+    movzx eax, bl
+    dec eax 
+    
+    ; Range
+    mov esi, OFFSET towerRangeSq
+    mov edx, DWORD PTR [esi + eax*4]
+    mov range, edx
+    
+    ; Damage
+    mov esi, OFFSET towerDamage
+    mov dx, WORD PTR [esi + eax*2]
+    mov damage, dx
+
+    ; 4. 搜尋怪物 (尋找範圍內的第一隻)
+    mov mIndex, 0
+MONSTER_LOOP:
+    cmp mIndex, 10 ; 假設每回合最多10隻
+    jge NEXT_TOWER ; 沒打到任何怪
+
+    ; 計算 Struct Offset
+    mov eax, SIZE Monster_status
+    mul mIndex
+    lea edi, roundMonsters[eax]
+
+    ; 檢查怪物是否活著且已生成
+    cmp (Monster_status PTR [edi]).HP, 0
+    jle NEXT_MONSTER
+    cmp (Monster_status PTR [edi]).alrearyDraw, 1
+    jne NEXT_MONSTER
+
+    ; 5. 計算距離 (Tower vs Monster)
+    ; DX
+    movzx eax, (Monster_status PTR [edi]).pos.X
+    movzx ebx, tX
+    sub eax, ebx
+    imul eax, eax
+    mov distSq, eax
+    
+    ; DY
+    movzx eax, (Monster_status PTR [edi]).pos.Y
+    movzx ebx, tY
+    sub eax, ebx
+    imul eax, eax
+    add distSq, eax
+    
+    ; 6. 判斷距離 <= Range
+    mov eax, distSq
+    cmp eax, range
+    jg NEXT_MONSTER ; 太遠
+
+    ; === 攻擊命中 ===
+    ; 扣血
+    mov ax, (Monster_status PTR [edi]).HP
+    sub ax, damage
+    mov (Monster_status PTR [edi]).HP, ax
+    
+    ; 設定塔進入冷卻
+    movzx eax, tType
+    dec eax ; index
+    mov esi, OFFSET towerReload
+    mov bl, byte ptr [esi+eax] ; 取得 Max CD
+    
+    mov esi, OFFSET towersCD
+    add esi, tIndex
+    mov byte ptr [esi], bl     ; 重置 CD
+    
+    jmp NEXT_TOWER ; 這個塔這回合打完了，換下一個塔 (單體攻擊)
+
+NEXT_MONSTER:
+    inc mIndex
+    jmp MONSTER_LOOP
+
+NEXT_TOWER:
+    inc tIndex
+    jmp TOWER_LOOP
+
+ALL_TOWERS_DONE:
+    ret
+towerCombatSystem ENDP

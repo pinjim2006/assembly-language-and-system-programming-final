@@ -22,7 +22,9 @@ initConsoleWindow PROTO     ; 初始化視窗大小與緩衝區
 outerBox PROTO              ; 繪製遊戲主外框
 initBlock PROTO             ; 初始化游標位置
 drawMovingDashedCursor PROTO; 繪製移動中的虛線框 (游標)
+drawAttackRangeOverlay PROTO :DWORD
 hasMapComponentAtCursor PROTO ; 檢查游標位置是否有地圖路徑元件
+towerCombatSystem PROTO
 toggleMenuState PROTO       ; 切換 "建造選單" 的開啟/關閉狀態
 handleNormalInput PROTO     ; 處理一般移動與刪除 (X) 輸入
 handleSideMenuInput PROTO   ; 處理側邊選單的上下選擇輸入
@@ -68,6 +70,7 @@ INCLUDE constants.inc
 ; 資料段 (Data Segment)
 ; =================================================================================
 INCLUDE data.inc
+
 
 .code
 ; =================================================================================
@@ -1045,24 +1048,34 @@ clearSideMenuCursor PROC USES eax
 clearSideMenuCursor ENDP
 
 ; =================================================================================
-; 切換選單狀態 (Menu State Toggle)
+; 切換選單狀態 - [修正版]
+; 修正：關閉選單時補畫怪物。
 ; =================================================================================
 toggleMenuState PROC
     mov eax, menuState
-    xor eax, 1          ; 0 變 1, 1 變 0
+    xor eax, 1          
     mov menuState, eax
+    
     cmp eax, 1
-    je SWITCH_TO_MENU   ; 如果切換到選單模式 (1)
-    call clearSideMenuCursor ; 如果關閉選單，清除游標
+    je SWITCH_TO_MENU   
+    
+    ; --- 關閉選單時 (清除範圍) ---
+    call clearSideMenuCursor 
+    call drawMapComponents  ; 清除範圍
+    call drawAllTowers      ; 補畫塔
+    call drawMonsters       ; <--- [新增] 補畫怪物
     jmp TOGGLE_DONE
+
 SWITCH_TO_MENU:
-    call drawSideMenuCursor  ; 繪製游標
+    call drawSideMenuCursor
+    INVOKE drawAttackRangeOverlay, 1
 TOGGLE_DONE:
     ret
 toggleMenuState ENDP
 
 ; =================================================================================
-; 處理側邊選單輸入 (選塔)
+; 處理側邊選單輸入 - [修正版]
+; 修正：在清除舊範圍後，補畫怪物 (drawMonsters)，防止怪物消失。
 ; =================================================================================
 handleSideMenuInput PROC USES eax
     cmp ax, 4800h ; UP Arrow
@@ -1074,33 +1087,45 @@ handleSideMenuInput PROC USES eax
     jmp MENU_INPUT_DONE
 
 MENU_UP:
-    call clearSideMenuCursor      ; 先清除舊位置
-    dec sideMenuCursorIndex       ; 索引 -1
+    call clearSideMenuCursor
+    ; [清除畫面]
+    call drawMapComponents ; 畫地圖 (會蓋掉紅色範圍，但也蓋掉怪物)
+    call drawAllTowers     ; 畫塔
+    call drawMonsters      ; <--- [新增] 把怪物畫回來！
+    
+    dec sideMenuCursorIndex       
     cmp sideMenuCursorIndex, 0
     jge UPDATE_CURSOR
-    mov sideMenuCursorIndex, 4    ; 循環回到最底
+    mov sideMenuCursorIndex, 4    
     jmp UPDATE_CURSOR
 
 MENU_DOWN:
-    call clearSideMenuCursor      
-    inc sideMenuCursorIndex       ; 索引 +1
+    call clearSideMenuCursor 
+    ; [清除畫面]
+    call drawMapComponents
+    call drawAllTowers
+    call drawMonsters      ; <--- [新增] 把怪物畫回來！
+    
+    inc sideMenuCursorIndex       
     cmp sideMenuCursorIndex, 4
     jle UPDATE_CURSOR
-    mov sideMenuCursorIndex, 0    ; 循環回到最頂
+    mov sideMenuCursorIndex, 0    
     jmp UPDATE_CURSOR
 
 UPDATE_CURSOR:
-    call drawSideMenuCursor       ; 畫新位置
+    call drawSideMenuCursor
+    ; 畫出新範圍
+    INVOKE drawAttackRangeOverlay, 1
     jmp MENU_INPUT_DONE
 
 MENU_SELECT:
-    ; 確認選塔
     mov eax, sideMenuCursorIndex
-    inc eax                       ; 索引 0-4 轉為 類型 1-5
-    mov bl, al                    ; 將類型存入 BL
-    call addTowerWithType         ; 執行蓋塔
-    call restoreGraphicsAtPos     ; 蓋完後重繪地圖格
-    call toggleMenuState          ; 關閉選單，切回移動模式
+    inc eax                       
+    mov bl, al                    
+    call addTowerWithType         
+    
+    call restoreGraphicsAtPos     
+    call toggleMenuState          
     jmp MENU_INPUT_DONE
 
 MENU_INPUT_DONE:
@@ -1268,6 +1293,160 @@ USE_STYLE:
     pop DWORD PTR outerBoxPos
     ret
 drawMovingDashedCursor ENDP
+; =================================================================================
+; 繪製攻擊範圍覆蓋層 - [空心正圓版]
+; 整合了標準畫圓演算法，僅顯示範圍邊緣的圓圈
+; =================================================================================
+drawAttackRangeOverlay PROC USES eax ebx ecx edx esi edi, logicType:DWORD
+    LOCAL rangeSq:DWORD              ; 攻擊範圍半徑平方
+    LOCAL rangeLimitMin:DWORD        ; 空心圓的內圈界線
+    LOCAL cursorGridX:DWORD          ; 圓心 X
+    LOCAL cursorGridY:DWORD          ; 圓心 Y
+    LOCAL currentGridX:DWORD         ; 當前掃描 X
+    LOCAL currentGridY:DWORD         ; 當前掃描 Y
+    LOCAL pixelDistSq:DWORD          ; 計算出的距離平方
+    LOCAL screenPos:COORD            ; 螢幕繪圖座標
+    LOCAL attrBuffer[32]:WORD        ; 顏色屬性緩衝區
+    LOCAL charBuffer[32]:BYTE        ; 字元緩衝區
+
+    ; ---------------------------------------------------------
+    ; 1. 準備繪圖樣式 (紅底紅字 = 0044h，文字為空白)
+    ; ---------------------------------------------------------
+    lea edi, attrBuffer
+    mov ecx, 32
+    mov ax, 0044h      ; 紅色背景
+    rep stosw          
+
+    lea edi, charBuffer
+    mov ecx, 32
+    mov al, 20h        ; 空白字元 (蓋掉底下的地圖符號，讓線條更乾淨)
+    rep stosb
+
+    ; ---------------------------------------------------------
+    ; 2. 取得塔的攻擊範圍並設定「厚度」
+    ; ---------------------------------------------------------
+    mov eax, sideMenuCursorIndex
+    mov esi, OFFSET towerRangeSq     
+    imul eax, 4
+    mov eax, DWORD PTR [esi+eax]
+    mov rangeSq, eax
+
+    ; 設定圓圈厚度 (Threshold)
+    ; 數值越大圈圈越粗。因為座標乘了5倍，約 150~200 適合 1 格寬度
+    sub eax, 250       
+    mov rangeLimitMin, eax
+
+    ; ---------------------------------------------------------
+    ; 3. 計算圓心 (游標所在的 Grid 座標)
+    ; ---------------------------------------------------------
+    movzx eax, blockPos.X
+    sub eax, 7                       
+    mov ebx, blockWidth              
+    xor edx, edx
+    div ebx
+    mov cursorGridX, eax
+
+    movzx eax, blockPos.Y
+    sub eax, 4                       
+    mov ebx, blockHeight             
+    xor edx, edx
+    div ebx
+    mov cursorGridY, eax
+
+    ; ---------------------------------------------------------
+    ; 4. 掃描整個地圖 Grid (15x7)
+    ; ---------------------------------------------------------
+    mov currentGridY, 0 
+ROW_LOOP:
+    mov eax, currentGridY
+    cmp eax, MAP_HEIGHT
+    jge DONE_OVERLAY
+    
+    mov currentGridX, 0 
+COL_LOOP:
+    mov eax, currentGridX
+    cmp eax, MAP_WIDTH
+    jge NEXT_ROW
+
+    ; ---------------------------------------------------------
+    ; 5. 計算距離平方 (畫圓核心演算法)
+    ; Formula: DistSq = (dx * 5)^2 + (dy * 5)^2
+    ; ---------------------------------------------------------
+    
+    ; --- 計算 X 距離 ---
+    mov eax, currentGridX
+    sub eax, cursorGridX
+    imul eax, blockWidth    ; 乘以 5
+    imul eax, eax           ; 平方
+    mov pixelDistSq, eax
+    
+    ; --- 計算 Y 距離 ---
+    mov eax, currentGridY
+    sub eax, cursorGridY
+    imul eax, blockWidth    ; ★ 關鍵：Y軸也乘 5 (而非3)，強制視覺為正圓
+    imul eax, eax           ; 平方
+    add pixelDistSq, eax    ; 相加
+
+    ; ---------------------------------------------------------
+    ; 6. 空心圓判斷邏輯
+    ; 條件：RangeLimitMin <= DistSq <= RangeSq
+    ; ---------------------------------------------------------
+    
+    mov eax, pixelDistSq
+    
+    ; 檢查 1: 是否超出外圈？ ( > RangeSq )
+    cmp eax, rangeSq
+    jg NEXT_COL             ; 太遠了，不畫
+    
+    ; 檢查 2: 是否在內圈裡面？ ( < RangeLimitMin )
+    cmp eax, rangeLimitMin
+    jl NEXT_COL             ; 太近了(在圓心)，不畫 -> 形成空心效果
+
+    ; ---------------------------------------------------------
+    ; 7. 符合條件，執行繪製
+    ; ---------------------------------------------------------
+    ; 計算螢幕座標 X
+    mov eax, currentGridX
+    imul eax, blockWidth
+    add eax, 7
+    mov screenPos.X, ax
+    
+    ; 計算螢幕座標 Y
+    mov eax, currentGridY
+    imul eax, blockHeight
+    add eax, 4
+    mov screenPos.Y, ax
+
+    ; 填滿這一個 Block
+    mov edi, blockHeight 
+COLOR_FILL_LOOP:
+    push edi
+    
+    ; 寫入紅色屬性
+    lea esi, attrBuffer
+    INVOKE WriteConsoleOutputAttribute, outputHandle, esi, blockWidth, screenPos, ADDR cellsWritten
+    
+    ; 寫入空白字元 (消除雜訊)
+    lea esi, charBuffer
+    INVOKE WriteConsoleOutputCharacter, outputHandle, esi, blockWidth, screenPos, ADDR cellsWritten
+    
+    inc screenPos.Y
+    pop edi
+    dec edi
+    cmp edi, 0
+    jg COLOR_FILL_LOOP
+
+NEXT_COL:
+    inc currentGridX
+    jmp COL_LOOP
+NEXT_ROW:
+    inc currentGridY
+    jmp ROW_LOOP
+
+DONE_OVERLAY:
+    ret
+drawAttackRangeOverlay ENDP
+
 
 ; =================================================================================
 ; 檢查當前游標位置是否在地圖元件上
@@ -1326,10 +1505,6 @@ NO_ANIM_CHANGE:
     ret
 updateDashAnimation ENDP
 
-; =================================================================================
-; 還原游標位置的圖形 (Anti-Flicker Clear)
-; 在繪製新游標前，先將舊位置還原成原本的 地圖元件 或 塔
-; =================================================================================
 restoreGraphicsAtPos PROC USES eax ebx ecx esi edi
     push DWORD PTR outerBoxPos
     mov ax, prevBlockPos.X
@@ -1354,6 +1529,7 @@ restoreGraphicsAtPos PROC USES eax ebx ecx esi edi
     cmp al, 5
     je DRAW_E
     jmp RESTORE_DONE
+
 DRAW_A: call drawATower
         jmp RESTORE_DONE
 DRAW_B: call drawBTower
@@ -1410,7 +1586,15 @@ DRAW_RESTORE_LOOP:
     inc outerBoxPos.Y
     pop ecx
     loop DRAW_RESTORE_LOOP
+
 RESTORE_DONE:
+    ; =========================================================
+    ; [新增修正] 補畫怪物
+    ; 防止游標還原地圖或塔時，把原本站在那裡的怪物「蓋掉」
+    ; 這裡會檢查所有活著的怪物並重畫，確保圖層順序正確 (怪物在塔/地圖之上)
+    ; =========================================================
+    call drawMonsters
+
     pop DWORD PTR outerBoxPos
     ret
 restoreGraphicsAtPos ENDP
@@ -1458,70 +1642,65 @@ getTowerTypeAtPos ENDP
 ; =================================================================================
 moveBlock PROC
 START_MOVE:
-    
-    ; 1. 更新動畫與游標繪製
+    ; 1. 更新動畫計時器
     call updateDashAnimation    
-    call restoreGraphicsAtPos   ; 清除上一次的游標
-    call drawMovingDashedCursor ; 畫這一次的游標
     
-    ; 更新 "上一次座標" 為 "當前座標"
+    ; 2. [清除舊游標] 
+    ; 先把「上一次」游標所在的位置還原成原本的地圖/塔
+    call restoreGraphicsAtPos   
+    
+    ; 3. [範圍顯示邏輯] 
+    ; 因為 restoreGraphicsAtPos 會把游標下的紅色範圍還原成綠色/路徑
+    ; 所以如果選單開啟中，我們必須補畫一次範圍，確保游標底下也是紅色的
+    cmp menuState, 1
+    jne SKIP_RANGE_DRAW
+
+    ; 直接畫紅色 (參數 1 已無意義，但保留以符合 PROTO)
+    INVOKE drawAttackRangeOverlay, 1
+    
+SKIP_RANGE_DRAW:
+
+    ; 4. [畫新游標] 畫出「這一次」的虛線框
+    call drawMovingDashedCursor
+
+    ; =========================================================
+    ; 更新 prevBlockPos
+    ; =========================================================
     mov ax, blockPos.X
     mov prevBlockPos.X, ax
     mov ax, blockPos.Y
     mov prevBlockPos.Y, ax
 
-    ; 檢查選單狀態，若開啟選單則跳過部分繪製
-    cmp menuState, 1
-    je DRAW_MENU_STATE
-    jmp AFTER_DRAW
-
-DRAW_MENU_STATE:
-    ; 可以在這裡加入選單特有的邏輯 (目前無)
-AFTER_DRAW:
-
-    ; =========================================================
-    ; 繪製頂部狀態欄 (每幀更新)
-    ; =========================================================
+    ; 繪製頂部狀態欄
     call drawGameStats
 
     ; =========================================================
-    ; 戰鬥狀態處理 (Combat Phase)
-    ; startWave: 1 = 戰鬥中, 0 = 準備期
+    ; 戰鬥狀態處理
     ; =========================================================
     cmp startWave, 1          
-    jne SKIP_COMBAT_LOGIC     ; 如果是 0,跳過怪物更新
-    
-    ; --- 戰鬥中邏輯 (每一幀執行) ---
+    jne SKIP_COMBAT_LOGIC     
     
     call ctrlDraw
-    
-    ; [註] 需在 monsters.asm 實作: 若 monsterCount == 0, 設 startWave = 0
+    call towerCombatSystem
 
 SKIP_COMBAT_LOGIC:	
-    ; =========================================================
-    ; 生命值檢測 - 檢查是否遊戲結束
-    ; =========================================================
+    ; 生命值與勝利檢測
     .IF life == 0
-        mov gameOver, 1   ; 設置遊戲結束標誌
-        ret               ; 返回主程式
+        mov gameOver, 1   
+        ret               
     .ENDIF
-    
-    ; =========================================================
-    ; 勝利檢測 - 檢查是否達到第21回合
-    ; =========================================================
     .IF cur_round >= 21
-        ret               ; 返回主程式，由主程式顯示YOU WIN
+        ret               
     .ENDIF
-    ; =========================================================
 	
-    mov eax, 50                 ; 延遲 50ms (控制遊戲速度)
+    ; 延遲與讀取輸入
+    mov eax, 50                 
     call Delay
-    
     call ReadKey
     jz NO_KEY_PRESSED
     
     ; ---------------------------------------------------------
-    ; [Debug 快捷鍵] 測試數值調整
+    ; [Debug 快捷鍵] (省略，保持原樣)
     ; ---------------------------------------------------------
     .IF ax == 0221h    ; 1: life--
         .IF life > 0
@@ -1543,49 +1722,46 @@ SKIP_COMBAT_LOGIC:
         inc cur_round
     .ENDIF
     
-    ; ---------------------------------------------------------
-    ; [G鍵] 開始戰鬥 (僅在準備期有效)
-    ; ---------------------------------------------------------
+    ; [G鍵] 開始戰鬥
     .IF (al == 'g') || (al == 'G')
         .IF (startWave == 0) && (menuState == 0)
-            ; 1. 生成怪物
             invoke createMonsters, cur_round
-            ; 2. 切換狀態為戰鬥
             mov startWave, 1      
         .ENDIF
     .ENDIF
 
-    ; ---------------------------------------------------------
-    ; [F鍵] 開啟選單 (僅在準備期有效)
-    ; ---------------------------------------------------------
+    ; [F鍵] 開啟/關閉選單
     .IF ax == 2166h ; 'f'
         .IF startWave == 0
             call toggleMenuState
+            jmp START_MOVE 
         .ENDIF
     .ENDIF
-	
-    ; 如果選單開啟中，輸入交給 SideMenu 處理
-    cmp menuState, 1
-    je HANDLE_MENU_INPUT_LABEL        
     
-    ; 否則交給一般輸入處理 (移動)
-    call handleNormalInput      
+    ; =========================================================
+    ; [輸入處理修正] 
+    ; =========================================================
+    
+    ; 1. 如果選單開啟，處理選塔
+    cmp menuState, 1
+    jne CHECK_NORMAL_INPUT
+    
+    call handleSideMenuInput
+    ; 選單開啟時，不跳轉到一般輸入，也不執行移動邏輯 -> 鎖定游標
     jmp END_INPUT_CHECK
 
-HANDLE_MENU_INPUT_LABEL:
-    call handleSideMenuInput
+CHECK_NORMAL_INPUT:
+    ; 2. 正常模式：可以移動
+    call handleNormalInput      
+    jmp END_INPUT_CHECK
 
 NO_KEY_PRESSED:
 END_INPUT_CHECK:
 
-    ; ---------------------------------------------------------
-    ; [ESC鍵] 暫停選單
-    ; ---------------------------------------------------------
-    .IF ax == 011Bh ; ESC 
+    ; [ESC鍵] (省略，保持原樣)
+    .IF ax == 011Bh 
         call showEscMenu
-        
         .IF eax == 1  ; Continue
-            ; 重畫整個畫面
             INVOKE SetConsoleTextAttribute, outputHandle, 0F0h 
             call Clrscr
             call outerBox
@@ -1593,7 +1769,6 @@ END_INPUT_CHECK:
             call drawAllTowers
             call drawSideMenu
         .ELSEIF eax == 2  ; Restart
-            ; 重置遊戲狀態變數
             mov life, 10
             mov money, 50
             mov cur_round, 1
@@ -1602,38 +1777,30 @@ END_INPUT_CHECK:
             mov startWave, 0
             mov menuState, 0
             
-            ; 清空塔陣列
+            ; 清空塔
             push ecx
             push edi
             push eax
-            
             mov ecx, towerMax
             xor eax, eax
             lea edi, towersPosX
-        CLEAR_ESC_TOWERS_X:
-            mov WORD PTR [edi], ax
+            CLEAR_ESC_TOWERS_X: mov WORD PTR [edi], ax
             add edi, 2
             loop CLEAR_ESC_TOWERS_X
-            
             mov ecx, towerMax
             lea edi, towersPosY
-        CLEAR_ESC_TOWERS_Y:
-            mov WORD PTR [edi], ax
+            CLEAR_ESC_TOWERS_Y: mov WORD PTR [edi], ax
             add edi, 2
             loop CLEAR_ESC_TOWERS_Y
-            
             mov ecx, towerMax
             lea edi, towersType
-        CLEAR_ESC_TOWERS_TYPE:
-            mov BYTE PTR [edi], 0
+            CLEAR_ESC_TOWERS_TYPE: mov BYTE PTR [edi], 0
             inc edi
             loop CLEAR_ESC_TOWERS_TYPE
-            
             pop eax
             pop edi
             pop ecx
             
-            ; 重新初始化地圖
             call initMapSystem
             INVOKE SetConsoleTextAttribute, outputHandle, 0F0h 
             call Clrscr
@@ -1653,7 +1820,7 @@ END_INPUT_CHECK:
         .ENDIF
     .ENDIF
 
-    jmp START_MOVE ; 回到迴圈開頭
+    jmp START_MOVE 
 EXIT_MOVE:
     ret
 moveBlock ENDP

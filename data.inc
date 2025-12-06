@@ -208,3 +208,24 @@ component5 BYTE 5 DUP(20h), 4 DUP(0B0h), 20h, 20h, 3 DUP(0B0h), 20h ; 轉角1
 component6 BYTE 5 DUP(20h), 20h, 4 DUP(0B0h), 20h, 3 DUP(0B0h), 20h ; 轉角2
 component7 BYTE 20h, 3 DUP(0B0h), 20h, 20h, 4 DUP(0B0h), 5 DUP(20h) ; 轉角3
 component8 BYTE 20h, 3 DUP(0B0h), 20h, 4 DUP(0B0h), 20h, 5 DUP(20h) ; 轉角4
+
+
+; =========================================================
+; 防禦塔屬性表 (Type 1-5)
+; =========================================================
+; 攻擊範圍 (半徑的平方, 避免開根號運算)
+; A(Canon): 20^2=400, B(Sniper): 40^2=1600, C(Ice): 12^2=144, D(Mage): 25^2=625, E(Missile): 100^2=10000
+towerRangeSq DWORD 400, 1600, 144, 625, 10000
+
+; 攻擊傷害
+towerDamage  WORD  5, 40, 2, 8, 100
+
+; 攻擊冷卻時間 (單位: Frame, 50ms/frame)
+towerReload  BYTE  15, 60, 2, 10, 100
+
+; 每個塔當前的冷卻計時器 (與 towerMax 對應)
+towersCD     BYTE  towerMax DUP(0)
+
+; 範圍顯示用的顏色屬性 (紅色背景 4Fh, 綠色背景 2Fh)
+attrRange    WORD  40h  ; 紅色背景(表示攻擊範圍)
+attrNormal   WORD  0F0h ; 正常白底黑字
