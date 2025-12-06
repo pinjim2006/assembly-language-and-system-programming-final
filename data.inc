@@ -5,6 +5,43 @@
 ; =================================================================================
 
 .data
+; =========================================================
+; [新增] 全域結構定義 (移到這裡以確保統一): 定義每回合個別怪物結構
+; =========================================================
+Monster_status STRUCT
+    HP          WORD 0          ; 0
+    Speed       BYTE 0          ; 2
+    Reward      BYTE 0          ; 3
+    pos         COORD <?, ?>    ; 4
+    prev_pos    COORD <?, ?>    ; 8
+    alrearyDraw BYTE 0          ; 12
+    moveCounter BYTE 0          ; 13
+    Direction   BYTE ?          ; 14
+    Chars       BYTE 15 DUP(?)  ; 15
+    ; Total Size = 30 (若無 Padding)
+Monster_status ENDS
+
+Bullet STRUCT
+    active      BYTE 0          ; 0
+    pos         COORD <?, ?>    ; 1 (注意對齊)
+    prev_pos    COORD <?, ?>    ; 5
+    targetID    DWORD 0         ; 9
+    damage      WORD 0          ; 13
+    tType       BYTE 0          ; 15
+Bullet ENDS
+
+; =========================================================
+; [新增] 全域陣列變數
+; =========================================================
+; 每回合怪的暫存陣列
+roundMonsters Monster_status 10 DUP(<>)
+
+; 子彈系統變數
+MAX_BULLETS = 20
+bulletList Bullet MAX_BULLETS DUP(<>)
+
+bulletChar      BYTE '*'
+bulletAttr      WORD 0ECh
 
 ; =================================================================================
 ; 介面資料 (Console Buffer Data)

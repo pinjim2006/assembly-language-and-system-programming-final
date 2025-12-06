@@ -25,6 +25,7 @@ drawMovingDashedCursor PROTO; 繪製移動中的虛線框 (游標)
 drawAttackRangeOverlay PROTO :DWORD
 hasMapComponentAtCursor PROTO ; 檢查游標位置是否有地圖路徑元件
 towerCombatSystem PROTO
+clearAllBullets PROTO
 toggleMenuState PROTO       ; 切換 "建造選單" 的開啟/關閉狀態
 handleNormalInput PROTO     ; 處理一般移動與刪除 (X) 輸入
 handleSideMenuInput PROTO   ; 處理側邊選單的上下選擇輸入
@@ -1052,6 +1053,8 @@ clearSideMenuCursor ENDP
 ; 修正：關閉選單時補畫怪物。
 ; =================================================================================
 toggleMenuState PROC
+    call clearAllBullets
+
     mov eax, menuState
     xor eax, 1          
     mov menuState, eax
@@ -1063,7 +1066,12 @@ toggleMenuState PROC
     call clearSideMenuCursor 
     call drawMapComponents  ; 清除範圍
     call drawAllTowers      ; 補畫塔
-    call drawMonsters       ; <--- [新增] 補畫怪物
+
+; [修正] 只有戰鬥中才補畫怪
+    cmp startWave, 1
+    jne SKIP_TOGGLE_MON
+    call drawMonsters       
+SKIP_TOGGLE_MON:
     jmp TOGGLE_DONE
 
 SWITCH_TO_MENU:
@@ -1091,8 +1099,13 @@ MENU_UP:
     ; [清除畫面]
     call drawMapComponents ; 畫地圖 (會蓋掉紅色範圍，但也蓋掉怪物)
     call drawAllTowers     ; 畫塔
-    call drawMonsters      ; <--- [新增] 把怪物畫回來！
-    
+
+; [修正] 只有戰鬥中才補畫怪
+    cmp startWave, 1
+    jne SKIP_UP_MON
+    call drawMonsters
+
+SKIP_UP_MON:
     dec sideMenuCursorIndex       
     cmp sideMenuCursorIndex, 0
     jge UPDATE_CURSOR
@@ -1294,12 +1307,11 @@ USE_STYLE:
     ret
 drawMovingDashedCursor ENDP
 ; =================================================================================
-; 繪製攻擊範圍覆蓋層 - [空心正圓版]
-; 整合了標準畫圓演算法，僅顯示範圍邊緣的圓圈
+; 繪製攻擊範圍覆蓋層 - [實心綠色版]
+; 將範圍內的所有格子塗上綠色背景，並保留地圖符號
 ; =================================================================================
 drawAttackRangeOverlay PROC USES eax ebx ecx edx esi edi, logicType:DWORD
     LOCAL rangeSq:DWORD              ; 攻擊範圍半徑平方
-    LOCAL rangeLimitMin:DWORD        ; 空心圓的內圈界線
     LOCAL cursorGridX:DWORD          ; 圓心 X
     LOCAL cursorGridY:DWORD          ; 圓心 Y
     LOCAL currentGridX:DWORD         ; 當前掃描 X
@@ -1307,23 +1319,19 @@ drawAttackRangeOverlay PROC USES eax ebx ecx edx esi edi, logicType:DWORD
     LOCAL pixelDistSq:DWORD          ; 計算出的距離平方
     LOCAL screenPos:COORD            ; 螢幕繪圖座標
     LOCAL attrBuffer[32]:WORD        ; 顏色屬性緩衝區
-    LOCAL charBuffer[32]:BYTE        ; 字元緩衝區
+    ; [移除] charBuffer 不再需要，因為我們不覆蓋字元
 
     ; ---------------------------------------------------------
-    ; 1. 準備繪圖樣式 (紅底紅字 = 0044h，文字為空白)
+    ; 1. 準備繪圖樣式 (綠底白字 = 002Fh)
+    ;    這樣可以讓地圖符號透出來，方便辨識地形
     ; ---------------------------------------------------------
     lea edi, attrBuffer
     mov ecx, 32
-    mov ax, 0044h      ; 紅色背景
+    mov ax, 002Fh      ; 2(Green Background) + F(Bright White Text)
     rep stosw          
 
-    lea edi, charBuffer
-    mov ecx, 32
-    mov al, 20h        ; 空白字元 (蓋掉底下的地圖符號，讓線條更乾淨)
-    rep stosb
-
     ; ---------------------------------------------------------
-    ; 2. 取得塔的攻擊範圍並設定「厚度」
+    ; 2. 取得塔的攻擊範圍
     ; ---------------------------------------------------------
     mov eax, sideMenuCursorIndex
     mov esi, OFFSET towerRangeSq     
@@ -1331,10 +1339,7 @@ drawAttackRangeOverlay PROC USES eax ebx ecx edx esi edi, logicType:DWORD
     mov eax, DWORD PTR [esi+eax]
     mov rangeSq, eax
 
-    ; 設定圓圈厚度 (Threshold)
-    ; 數值越大圈圈越粗。因為座標乘了5倍，約 150~200 適合 1 格寬度
-    sub eax, 250       
-    mov rangeLimitMin, eax
+    ; [修改] 這裡移除了 rangeLimitMin (空心圓) 的計算，因為我們要填滿整個圓
 
     ; ---------------------------------------------------------
     ; 3. 計算圓心 (游標所在的 Grid 座標)
@@ -1383,27 +1388,24 @@ COL_LOOP:
     ; --- 計算 Y 距離 ---
     mov eax, currentGridY
     sub eax, cursorGridY
-    imul eax, blockWidth    ; ★ 關鍵：Y軸也乘 5 (而非3)，強制視覺為正圓
+    imul eax, blockWidth    ; Y軸也乘 5 以維持正圓
     imul eax, eax           ; 平方
     add pixelDistSq, eax    ; 相加
 
     ; ---------------------------------------------------------
-    ; 6. 空心圓判斷邏輯
-    ; 條件：RangeLimitMin <= DistSq <= RangeSq
+    ; 6. 範圍判定
     ; ---------------------------------------------------------
     
     mov eax, pixelDistSq
     
-    ; 檢查 1: 是否超出外圈？ ( > RangeSq )
+    ; 檢查: 是否超出外圈？ ( > RangeSq )
     cmp eax, rangeSq
     jg NEXT_COL             ; 太遠了，不畫
     
-    ; 檢查 2: 是否在內圈裡面？ ( < RangeLimitMin )
-    cmp eax, rangeLimitMin
-    jl NEXT_COL             ; 太近了(在圓心)，不畫 -> 形成空心效果
+    ; [修改] 移除了內圈檢查 (rangeLimitMin)，所以只要在範圍內就會被畫到
 
     ; ---------------------------------------------------------
-    ; 7. 符合條件，執行繪製
+    ; 7. 執行繪製 (只改變顏色屬性，保留地圖文字)
     ; ---------------------------------------------------------
     ; 計算螢幕座標 X
     mov eax, currentGridX
@@ -1422,13 +1424,11 @@ COL_LOOP:
 COLOR_FILL_LOOP:
     push edi
     
-    ; 寫入紅色屬性
+    ; 寫入綠色屬性 (Highlight)
     lea esi, attrBuffer
     INVOKE WriteConsoleOutputAttribute, outputHandle, esi, blockWidth, screenPos, ADDR cellsWritten
     
-    ; 寫入空白字元 (消除雜訊)
-    lea esi, charBuffer
-    INVOKE WriteConsoleOutputCharacter, outputHandle, esi, blockWidth, screenPos, ADDR cellsWritten
+    ; [修改] 移除了 WriteConsoleOutputCharacter，這樣就不會把地圖變成空白
     
     inc screenPos.Y
     pop edi
@@ -1446,7 +1446,6 @@ NEXT_ROW:
 DONE_OVERLAY:
     ret
 drawAttackRangeOverlay ENDP
-
 
 ; =================================================================================
 ; 檢查當前游標位置是否在地圖元件上
@@ -1588,13 +1587,15 @@ DRAW_RESTORE_LOOP:
     loop DRAW_RESTORE_LOOP
 
 RESTORE_DONE:
+   ; =========================================================
+    ; [修正] 只有在戰鬥階段 (startWave == 1) 才補畫怪物
+    ; 非戰鬥階段不畫怪物，徹底杜絕殘影
     ; =========================================================
-    ; [新增修正] 補畫怪物
-    ; 防止游標還原地圖或塔時，把原本站在那裡的怪物「蓋掉」
-    ; 這裡會檢查所有活著的怪物並重畫，確保圖層順序正確 (怪物在塔/地圖之上)
-    ; =========================================================
+    cmp startWave, 1
+    jne SKIP_MONSTER_REDRAW
+    
     call drawMonsters
-
+SKIP_MONSTER_REDRAW:
     pop DWORD PTR outerBoxPos
     ret
 restoreGraphicsAtPos ENDP
@@ -1825,293 +1826,6 @@ EXIT_MOVE:
     ret
 moveBlock ENDP
 
-; =================================================================================
-; 新增塔到陣列中 (Build Tower)
-; =================================================================================
-addTowerWithType PROC USES eax ecx esi
-    ; 1. 檢查是否重疊
-    call checkTowerAtCurrentPosition
-    cmp eax, 1
-    je NO_ADD_TYPE ; 重疊，不蓋
-    
-    ; 2. 檢查地形限制 (不能蓋在路上)
-    call canPlaceTowerAtCurrentPos
-    cmp eax, 0
-    je NO_ADD_TYPE ; 地形不符，不蓋
-    
-    ; 3. 檢查塔數上限
-    mov eax, towerCount
-    cmp eax, towerMax
-    jge NO_ADD_TYPE
-    
-    ; 4. 檢查金錢是否足夠
-    mov eax, 0
-    mov al, bl              ; bl 包含塔的類型 (1-5)
-    dec eax                 ; 轉換為陣列索引 (0-4)
-    mov esi, OFFSET towerCosts
-    imul eax, 4             ; DWORD = 4 bytes
-    add esi, eax
-    mov eax, DWORD PTR [esi] ; 取得此塔的價格
-    cmp money, eax          ; 比較現有金錢與價格
-    jl NO_ADD_TYPE          ; 金錢不足，無法建造
-    
-    ; 5. 扣除金錢
-    sub money, eax
-    
-    ; 6. 寫入資料陣列
-    mov ecx, towerCount     ; 使用 towerCount 作為索引
-    ; 寫入 X
-    mov esi, OFFSET towersPosX
-    mov eax, ecx            ; 使用 ecx (towerCount) 而不是被修改的 eax
-    imul eax, 2
-    add esi, eax
-    mov ax, blockPos.X
-    mov WORD PTR [esi], ax
-    ; 寫入 Y
-    mov esi, OFFSET towersPosY
-    mov eax, ecx
-    imul eax, 2
-    add esi, eax
-    mov ax, blockPos.Y
-    mov WORD PTR [esi], ax
-    ; 寫入 Type (BL 來自 handleSideMenuInput)
-    mov esi, OFFSET towersType
-    mov eax, ecx
-    add esi, eax
-    mov BYTE PTR [esi], bl
-    
-    inc towerCount
-NO_ADD_TYPE:
-    ret
-addTowerWithType ENDP
-
-; =================================================================================
-; 檢查當前位置是否有塔 (Collision Check)
-; =================================================================================
-checkTowerAtCurrentPosition PROC USES ebx ecx esi
-    mov ecx, 0
-CHECK_POS_LOOP:
-    cmp ecx, towerCount
-    jge NO_TOWER_HERE
-    ; Check X
-    mov esi, OFFSET towersPosX
-    mov ebx, ecx
-    imul ebx, 2
-    add esi, ebx
-    mov bx, WORD PTR [esi]
-    cmp bx, blockPos.X
-    jne NEXT_CHECK_POS
-    ; Check Y
-    mov esi, OFFSET towersPosY
-    mov ebx, ecx
-    imul ebx, 2
-    add esi, ebx
-    mov bx, WORD PTR [esi]
-    cmp bx, blockPos.Y
-    je TOWER_HERE ; 找到重疊
-NEXT_CHECK_POS:
-    inc ecx
-    jmp CHECK_POS_LOOP
-TOWER_HERE:
-    mov eax, 1
-    ret
-NO_TOWER_HERE:
-    mov eax, 0
-    ret
-checkTowerAtCurrentPosition ENDP
-
-; =================================================================================
-; 刪除塔 (Delete Tower)
-; =================================================================================
-deleteTower PROC USES eax ebx ecx esi
-    cmp towerCount, 0
-    je DELETE_DONE
-    mov ecx, 0
-CHECK_TOWER_LOOP:
-    cmp ecx, towerCount
-    jge DELETE_DONE
-    call isTowerAtPositionSimple
-    cmp eax, 1
-    je DELETE_FOUND_TOWER ; 找到要刪的塔
-    inc ecx
-    jmp CHECK_TOWER_LOOP
-DELETE_FOUND_TOWER:
-    ; 取得被刪除塔的類型並計算歸還金錢
-    mov esi, OFFSET towersType
-    add esi, ecx                ; ecx 是塔的索引
-    mov al, BYTE PTR [esi]      ; 取得塔類型 (1-5)
-    mov ebx, 0
-    mov bl, al
-    dec ebx                     ; 轉換為陣列索引 (0-4)
-    mov esi, OFFSET towerCosts
-    imul ebx, 4                 ; DWORD = 4 bytes
-    add esi, ebx
-    mov eax, DWORD PTR [esi]    ; 取得原價格
-    shr eax, 1                  ; 除以 2 (一半價格)
-    add money, eax              ; 歸還一半金錢
-    
-    call removeTowerAtIndexSimple
-DELETE_DONE:
-    ret
-deleteTower ENDP
-
-isTowerAtPositionSimple PROC USES ebx esi
-    mov esi, OFFSET towersPosX
-    mov ebx, ecx
-    imul ebx, 2
-    add esi, ebx
-    mov bx, WORD PTR [esi]
-    cmp bx, blockPos.X
-    jne NOT_MATCH_SIMPLE
-    mov esi, OFFSET towersPosY
-    mov ebx, ecx
-    imul ebx, 2
-    add esi, ebx
-    mov bx, WORD PTR [esi]
-    cmp bx, blockPos.Y
-    je TOWER_FOUND_AT_POSITION
-NOT_MATCH_SIMPLE:
-    mov eax, 0
-    ret
-TOWER_FOUND_AT_POSITION:
-    mov eax, 1
-    ret
-isTowerAtPositionSimple ENDP
-
-; =================================================================================
-; 移除陣列中指定索引的塔 (Remove from Array)
-; 實作方式：將最後一個元素搬移到被刪除的位置，然後 Count - 1
-; =================================================================================
-removeTowerAtIndexSimple PROC USES eax ebx edx esi edi
-    mov eax, ecx        ; 目標索引
-    mov ebx, towerCount
-    dec ebx             ; 最後一個索引
-    cmp eax, ebx
-    jge JUST_DECREASE_COUNT_SIMPLE ; 如果刪的是最後一個，直接減 Count
-    
-    ; --- 搬移陣列邏輯 (這裡實作的是陣列平移 shift left) ---
-    ; 1. Shift X Array
-    mov edx, eax
-    mov esi, OFFSET towersPosX
-    mov eax, edx
-    imul eax, 2
-    add esi, eax
-    mov edi, esi
-    add esi, 2
-    mov eax, ebx
-    sub eax, edx
-MOVE_X_LOOP_SIMPLE:
-    cmp eax, 0
-    je MOVE_Y_ARRAY_SIMPLE
-    mov cx, WORD PTR [esi]
-    mov WORD PTR [edi], cx
-    add esi, 2
-    add edi, 2
-    dec eax
-    jmp MOVE_X_LOOP_SIMPLE
-    
-    ; 2. Shift Y Array
-MOVE_Y_ARRAY_SIMPLE:
-    mov esi, OFFSET towersPosY
-    mov eax, edx
-    imul eax, 2
-    add esi, eax
-    mov edi, esi
-    add esi, 2
-    mov eax, ebx
-    sub eax, edx
-MOVE_Y_LOOP_SIMPLE:
-    cmp eax, 0
-    je MOVE_TYPE_ARRAY_SIMPLE
-    mov cx, WORD PTR [esi]
-    mov WORD PTR [edi], cx
-    add esi, 2
-    add edi, 2
-    dec eax
-    jmp MOVE_Y_LOOP_SIMPLE
-    
-    ; 3. Shift Type Array
-MOVE_TYPE_ARRAY_SIMPLE:
-    mov esi, OFFSET towersType
-    mov eax, edx
-    add esi, eax
-    mov edi, esi
-    inc esi
-    mov eax, ebx
-    sub eax, edx
-MOVE_TYPE_LOOP_SIMPLE:
-    cmp eax, 0
-    je JUST_DECREASE_COUNT_SIMPLE
-    mov cl, BYTE PTR [esi]
-    mov BYTE PTR [edi], cl
-    inc esi
-    inc edi
-    dec eax
-    jmp MOVE_TYPE_LOOP_SIMPLE
-
-JUST_DECREASE_COUNT_SIMPLE:
-    dec towerCount
-    ret
-removeTowerAtIndexSimple ENDP
-
-; =================================================================================
-; 繪製指定索引的塔
-; =================================================================================
-drawTower PROC USES eax ebx ecx edi esi
-    ; 參數從堆疊取得 (stdcall convention 手動處理)
-    ; [ESP+24] = Tower Index (因使用了 USES 保存了 5 個暫存器 + return address)
-    mov edi, [esp+24]      
-
-    push DWORD PTR outerBoxPos
-
-    ; 取得 X 座標
-    mov esi, OFFSET towersPosX
-    mov ebx, edi
-    imul ebx, 2
-    add esi, ebx
-    mov ax, WORD PTR [esi]
-    mov outerBoxPos.X, ax
-
-    ; 取得 Y 座標
-    mov esi, OFFSET towersPosY
-    mov ebx, edi
-    imul ebx, 2
-    add esi, ebx
-    mov ax, WORD PTR [esi]
-    mov outerBoxPos.Y, ax
-
-    ; 取得 Type 並呼叫對應繪圖函式
-    mov esi, OFFSET towersType
-    mov eax, edi
-    add esi, eax
-    mov bl, BYTE PTR [esi]
-    
-    cmp bl, 1
-    je DRAW_TOWER_A
-    cmp bl, 2
-    je DRAW_TOWER_B
-    cmp bl, 3
-    je DRAW_TOWER_C
-    cmp bl, 4
-    je DRAW_TOWER_D
-    cmp bl, 5
-    je DRAW_TOWER_E
-    call drawATower ; Default
-    jmp DRAW_TOWER_DONE
-
-DRAW_TOWER_A: call drawATower
-    jmp DRAW_TOWER_DONE
-DRAW_TOWER_B: call drawBTower
-    jmp DRAW_TOWER_DONE
-DRAW_TOWER_C: call drawCTower
-    jmp DRAW_TOWER_DONE
-DRAW_TOWER_D: call drawDTower
-    jmp DRAW_TOWER_DONE
-DRAW_TOWER_E: call drawETower
-DRAW_TOWER_DONE:
-    pop DWORD PTR outerBoxPos
-    ret 4 ; 清除堆疊參數
-drawTower ENDP
 
 ; =================================================================================
 ; 初始化地圖系統 (複製預設資料)
@@ -2123,46 +1837,6 @@ initMapSystem PROC USES eax ecx esi edi
     rep movsb ; 快速記憶體複製
     ret
 initMapSystem ENDP
-
-; =================================================================================
-; 檢查地形 (Terrain Check)
-; =================================================================================
-canPlaceTowerAtCurrentPos PROC USES ebx ecx esi
-    ; 轉換螢幕座標 -> 地圖 Grid
-    movzx eax, blockPos.X
-    sub eax, 7
-    mov ebx, blockWidth
-    xor edx, edx
-    div ebx
-    mov ebx, eax
-    movzx eax, blockPos.Y
-    sub eax, 4
-    mov ecx, blockHeight
-    xor edx, edx
-    div ecx
-    
-    ; 邊界檢查
-    cmp ebx, MAP_WIDTH
-    jge CANNOT_PLACE
-    cmp eax, MAP_HEIGHT
-    jge CANNOT_PLACE
-    
-    ; 檢查地圖資料是否為 EMPTY (0)
-    mov ecx, MAP_WIDTH
-    mul ecx
-    add eax, ebx
-    mov esi, OFFSET mapData
-    add esi, eax
-    mov al, BYTE PTR [esi]
-    cmp al, COMPONENT_EMPTY
-    je CAN_PLACE ; 只有空地可以蓋塔
-CANNOT_PLACE:
-    mov eax, 0
-    ret
-CAN_PLACE:
-    mov eax, 1
-    ret
-canPlaceTowerAtCurrentPos ENDP
 
 ; =================================================================================
 ; 繪製整個地圖
@@ -2244,212 +1918,6 @@ calculateScreenPosition PROC
     ret
 calculateScreenPosition ENDP
 
-; =================================================================================
-; 各式防禦塔外觀繪製函式
-; 使用 ASCII 組合出圖形，並透過 WriteConsoleOutputCharacter 輸出
-; =================================================================================
-
-; Tower A: 加農砲 (Cannon)
-; Visual:
-;  /╧\
-;  |█|
-; ▲###▲
-drawATower PROC USES esi
-    mov esi, OFFSET attrTowerA 
-    
-    ; Row 1:  /╧\ 
-    INVOKE WriteConsoleOutputAttribute, outputHandle, esi, blockWidth, outerBoxPos, ADDR cellsWritten
-    mov tempBuffer, 20h     ; ' '
-    mov tempBuffer+1, 2Fh   ; '/'
-    mov tempBuffer+2, 0CFh  ; '╧' (上突出的連接座)
-    mov tempBuffer+3, 5Ch   ; '\'
-    mov tempBuffer+4, 20h   ; ' '
-    INVOKE WriteConsoleOutputCharacter, outputHandle, ADDR tempBuffer, blockWidth, outerBoxPos, ADDR count
-    inc outerBoxPos.Y
-    
-    ; Row 2: |█|
-    INVOKE WriteConsoleOutputAttribute, outputHandle, esi, blockWidth, outerBoxPos, ADDR cellsWritten
-    mov tempBuffer, 20h     ; ' '
-    mov tempBuffer+1, 7Ch   ; '| '
-    mov tempBuffer+2, 0DBh  ; '█' (側半填滿方塊，模擬砲管陰影或開口)
-    mov tempBuffer+3, 7Ch   ; '|'
-    mov tempBuffer+4, 20h   ; ' '
-    INVOKE WriteConsoleOutputCharacter, outputHandle, ADDR tempBuffer, blockWidth, outerBoxPos, ADDR count
-    inc outerBoxPos.Y
-    
-    ; Row 3: ▲###▲
-    INVOKE WriteConsoleOutputAttribute, outputHandle, esi, blockWidth, outerBoxPos, ADDR cellsWritten
-    mov tempBuffer, 1Eh      ; '▲'
-    mov tempBuffer+1, 23h    ; '#'
-    mov tempBuffer+2, 23h    ; '#'
-    mov tempBuffer+3, 23h    ; '#'
-    mov tempBuffer+4, 1Eh    ; '▲'
-    INVOKE WriteConsoleOutputCharacter, outputHandle, ADDR tempBuffer, blockWidth, outerBoxPos, ADDR count
-    
-    ret
-drawATower ENDP
-
-; Tower B: 狙擊槍 (Sniper) - 簡潔版
-; 造型設計:
-; Row 1: (空)
-; Row 2: ─═╤╞╦  (模擬 ╾━╤デ╦)
-; Row 3:  ^     (左下角三角形腳架)
-drawBTower PROC USES esi
-    mov esi, OFFSET attrTowerB
-
-    ; Row 1: 空白
-    INVOKE WriteConsoleOutputAttribute, outputHandle, esi, blockWidth, outerBoxPos, ADDR cellsWritten
-    mov tempBuffer, 20h     ; ' '
-    mov tempBuffer+1, 20h   ; ' '
-    mov tempBuffer+2, 20h   ; ' '
-    mov tempBuffer+3, 20h   ; ' '
-    mov tempBuffer+4, 20h   ; ' '
-    INVOKE WriteConsoleOutputCharacter, outputHandle, ADDR tempBuffer, blockWidth, outerBoxPos, ADDR count
-    inc outerBoxPos.Y
-
-    ; Row 2: ─═╤╞╦ (槍身)
-    INVOKE WriteConsoleOutputAttribute, outputHandle, esi, blockWidth, outerBoxPos, ADDR cellsWritten
-    mov tempBuffer, 0C4h    ; ─ (槍口)
-    mov tempBuffer+1, 0CDh  ; ═ (槍管)
-    mov tempBuffer+2, 0D1h  ; ╤ (瞄準鏡)
-    mov tempBuffer+3, 0C6h  ; ╞ (槍身)
-    mov tempBuffer+4, 0CBh  ; ╦ (槍托)
-    INVOKE WriteConsoleOutputCharacter, outputHandle, ADDR tempBuffer, blockWidth, outerBoxPos, ADDR count
-    inc outerBoxPos.Y
-
-    ; Row 3:  ▲    (三角形腳架)
-    INVOKE WriteConsoleOutputAttribute, outputHandle, esi, blockWidth, outerBoxPos, ADDR cellsWritten
-    mov tempBuffer, 20h     ; ' '
-    mov tempBuffer+1, 5Eh   ; ▲ (實心三角形，位於槍管下方)
-    mov tempBuffer+2, 20h   ; ' '
-    mov tempBuffer+3, 20h   ; ' '
-    mov tempBuffer+4, 20h   ; ' '
-    INVOKE WriteConsoleOutputCharacter, outputHandle, ADDR tempBuffer, blockWidth, outerBoxPos, ADDR count
-
-    ret
-drawBTower ENDP
-
-
-; Tower C: 寒冰箭 (Ice Arrow)
-drawCTower PROC USES esi
-    mov esi, OFFSET attrTowerC
-    
-    ; Row 1:   /) 
-    INVOKE WriteConsoleOutputAttribute, outputHandle, esi, blockWidth, outerBoxPos, ADDR cellsWritten
-    mov tempBuffer, 20h     ; ' '
-    mov tempBuffer+1, 2Fh   ; '/ '
-    mov tempBuffer+2, 29h   ; ')'
-    mov tempBuffer+3, 20h   ; ' '
-    mov tempBuffer+4, 20h   ; ' '
-    INVOKE WriteConsoleOutputCharacter, outputHandle, ADDR tempBuffer, blockWidth, outerBoxPos, ADDR count
-    inc outerBoxPos.Y
-    
-    ; Row 2: <--##
-    INVOKE WriteConsoleOutputAttribute, outputHandle, esi, blockWidth, outerBoxPos, ADDR cellsWritten
-    mov tempBuffer, 3Ch     ; '<'
-    mov tempBuffer+1, 2Dh   ; '-'
-    mov tempBuffer+2, 2Dh   ; '-'
-    mov tempBuffer+3, 23h   ; '#'
-    mov tempBuffer+4, 23h   ; '#'
-    INVOKE WriteConsoleOutputCharacter, outputHandle, ADDR tempBuffer, blockWidth, outerBoxPos, ADDR count
-    inc outerBoxPos.Y
-    
-    ; Row 3:   \) 
-    INVOKE WriteConsoleOutputAttribute, outputHandle, esi, blockWidth, outerBoxPos, ADDR cellsWritten
-    mov tempBuffer, 20h     ; ' '
-    mov tempBuffer+1, 5Ch   ; '\'
-    mov tempBuffer+2, 29h   ; ')'
-    mov tempBuffer+3, 20h   ; ' '
-    mov tempBuffer+4, 20h   ; ' '
-    INVOKE WriteConsoleOutputCharacter, outputHandle, ADDR tempBuffer, blockWidth, outerBoxPos, ADDR count
-    ret
-drawCTower ENDP
-
-
-; Tower D: 法師塔 (Mage) - 符文
-drawDTower PROC USES esi
-    mov esi, OFFSET attrTowerD
-    ; Row 1: 魔法符文
-    INVOKE WriteConsoleOutputAttribute, outputHandle, esi, blockWidth, outerBoxPos, ADDR cellsWritten
-    mov tempBuffer, 20h
-    mov tempBuffer+1, 0DAh  ; ┌
-    mov tempBuffer+2, 0E8h  ; Φ
-    mov tempBuffer+3, 0BFh  ; ┐
-    mov tempBuffer+4, 20h
-    INVOKE WriteConsoleOutputCharacter, outputHandle, ADDR tempBuffer, blockWidth, outerBoxPos, ADDR count
-    inc outerBoxPos.Y
-    
-    ; Row 2: 懸浮座
-    INVOKE WriteConsoleOutputAttribute, outputHandle, esi, blockWidth, outerBoxPos, ADDR cellsWritten
-    mov tempBuffer, 20h
-    mov tempBuffer+1, 0C0h  ; └
-    mov tempBuffer+2, 0B3h  ; │
-    mov tempBuffer+3, 0D9h  ; ┘
-    mov tempBuffer+4, 20h
-    INVOKE WriteConsoleOutputCharacter, outputHandle, ADDR tempBuffer, blockWidth, outerBoxPos, ADDR count
-    inc outerBoxPos.Y
-    
-    ; Row 3: 法陣
-    INVOKE WriteConsoleOutputAttribute, outputHandle, esi, blockWidth, outerBoxPos, ADDR cellsWritten
-    mov tempBuffer, 20h
-    mov tempBuffer+1, 0C4h  ; ─
-    mov tempBuffer+2, 0CAh  ; ╩
-    mov tempBuffer+3, 0C4h  ; ─
-    mov tempBuffer+4, 20h
-    INVOKE WriteConsoleOutputCharacter, outputHandle, ADDR tempBuffer, blockWidth, outerBoxPos, ADDR count
-    ret
-drawDTower ENDP
-
-; Tower E: 導彈 (missile) 
-drawETower PROC USES esi
-mov esi, OFFSET attrTowerC
-    ; Row 1:   ^   (Tip)
-    INVOKE WriteConsoleOutputAttribute, outputHandle, esi, blockWidth, outerBoxPos, ADDR cellsWritten
-    mov tempBuffer, 20h     ; ' '
-    mov tempBuffer+1, 20h   ; ' '
-    mov tempBuffer+2, 1Eh   ; '^'
-    mov tempBuffer+3, 20h   ; ' '
-    mov tempBuffer+4, 20h   ; ' '
-    INVOKE WriteConsoleOutputCharacter, outputHandle, ADDR tempBuffer, blockWidth, outerBoxPos, ADDR count
-    inc outerBoxPos.Y
-    
-    ; Row 2:  |#|  (Shaft)
-    INVOKE WriteConsoleOutputAttribute, outputHandle, esi, blockWidth, outerBoxPos, ADDR cellsWritten
-    mov tempBuffer, 20h     ; ' '
-    mov tempBuffer+1, 7Ch   ; '|'
-    mov tempBuffer+2, 23h   ; '#'
-    mov tempBuffer+3, 7Ch   ; '|'
-    mov tempBuffer+4, 20h   ; ' '
-    INVOKE WriteConsoleOutputCharacter, outputHandle, ADDR tempBuffer, blockWidth, outerBoxPos, ADDR count
-    inc outerBoxPos.Y
-    
-    ; Row 3:  /#\  (Base)
-    INVOKE WriteConsoleOutputAttribute, outputHandle, esi, blockWidth, outerBoxPos, ADDR cellsWritten
-    mov tempBuffer, 2Fh     ; '/'
-    mov tempBuffer+1, 23h   ; '#'
-    mov tempBuffer+2, 7Ch   ; '|'
-    mov tempBuffer+3, 23h   ; '#'
-    mov tempBuffer+4, 5Ch   ; '\'
-    INVOKE WriteConsoleOutputCharacter, outputHandle, ADDR tempBuffer, blockWidth, outerBoxPos, ADDR count
-    ret
-drawETower ENDP
-
-; =================================================================================
-; 迴圈繪製所有已建造的塔
-; =================================================================================
-drawAllTowers PROC USES ecx
-    mov ecx, 0
-L:
-    cmp ecx, towerCount
-    jge DONE
-    push ecx
-    call drawTower ; 傳遞 Index
-    inc ecx
-    jmp L
-DONE:
-    ret
-drawAllTowers ENDP
-
 INCLUDE monsters.asm
-
+INCLUDE tower.asm
 END main
