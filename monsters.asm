@@ -667,7 +667,10 @@ check:
     jmp monArrive
 
 monDead:
-	;待新增擊殺報酬     
+	; 怪物擊殺報酬 - 增加對應之金錢報酬 
+	mov eax, money
+	add eax, (Monster_status PTR [edi]).Reward
+	mov money, eax
     jmp processMonData
 
 monArrive:
@@ -686,14 +689,13 @@ triggerGameOver:
 	
 processMonData:
 	mov (Monster_status PTR [edi]).Speed, 0
-	;(施工中)
 	mov edx, monsterCount
 	sub edx, 1
 	mov monsterCount, edx
 	cmp edx, 0
 	ja nextMon
 	
-; 判斷回合結束與否	(施工中)
+; 判斷回合結束與否	
 endWave:
 	mov startWave, 0	; monsterCount==0 -> 回合結束
 	mov menuState, 0
