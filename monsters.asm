@@ -126,21 +126,21 @@ MonsterTypeTable LABEL BYTE
     ;  HP(DW)   Speed(DB)  Reward(DB)
     DW 15       
     DB 1, 1           ; 101 菜雞
-    DW 25       
+    DW 30       
     DB 1, 1           ; 102 哥布林
-    DW 50       
+    DW 100       
     DB 2, 3           ; 103 貓妖
-    DW 35       
+    DW 60       
     DB 3, 3           ; 104 兔獸
-    DW 100      
+    DW 166      
     DB 1, 4           ; 105 術師
-    DW 250      
-    DB 2, 4           ; 106 光魍
-    DW 160      
-    DB 4, 4           ; 107 賽拉
     DW 300      
-    DB 1, 5           ; 108 海怪
-    DW 444      
+    DB 2, 4           ; 106 光魍
+    DW 200      
+    DB 4, 4           ; 107 賽拉
+    DW 400      
+    DB 2, 5           ; 108 海怪
+    DW 666      
     DB 3, 10           ; 109 終淵 
     
 ; ------------------------------------------------
@@ -704,6 +704,12 @@ monDead:
 
 monArrive:
     ; 怪物抵達終點懲罰
+	movzx ecx, (Monster_status PTR [edi]).Reward	;終淵到達終點即game over
+	.IF ecx == 10
+		mov life, 0
+		ret
+	.ENDIF
+	
     mov eax, life
     dec eax
     mov life, eax
@@ -805,6 +811,6 @@ nextMon:
     inc ebx
     cmp ebx, 10
     jb check
-    
+   
     ret
 removeMonsters ENDP
