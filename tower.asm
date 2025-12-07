@@ -747,6 +747,33 @@ CHECK_HIT:
     mov ax, WORD PTR [edi] ; HP
     sub ax, (Bullet PTR [esi]).damage
     mov WORD PTR [edi], ax
+    
+    ; 檢查是否為冰塔子彈 (類型3)
+    cmp (Bullet PTR [esi]).tType, 3
+    jne DEACTIVATE_BULLET
+    
+    ; 冰塔減速效果
+    push eax
+    push ebx
+    
+    ; 如果怪物還沒被減速過，則觸發減速
+    cmp (Monster_status PTR [edi]).slowTimer, 0
+    jne ICE_EFFECT_DONE
+    
+    ; 保存原始速度並將速度減半
+    mov al, (Monster_status PTR [edi]).Speed
+    mov (Monster_status PTR [edi]).originalSpeed, al
+    shr al, 1                               ; 速度除以2
+    cmp al, 1                               ; 最低速度為1
+    jge SET_SLOW_SPEED
+    mov al, 1
+SET_SLOW_SPEED:
+    mov (Monster_status PTR [edi]).Speed, al
+    mov (Monster_status PTR [edi]).slowTimer, 120   ; 減速持續2秒（60fps*2）
+    
+ICE_EFFECT_DONE:
+    pop ebx
+    pop eax
     jmp DEACTIVATE_BULLET
 
 DRAW_BULLET:

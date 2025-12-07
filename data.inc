@@ -17,8 +17,10 @@ Monster_status STRUCT
     alrearyDraw BYTE 0          ; 12
     moveCounter BYTE 0          ; 13
     Direction   BYTE ?          ; 14
-    Chars       BYTE 15 DUP(?)  ; 15
-    ; Total Size = 30 (若無 Padding)
+    originalSpeed BYTE 0        ; 15 - 原始速度（用於恢復）
+    slowTimer   BYTE 0          ; 16 - 減速剩餘時間
+    Chars       BYTE 15 DUP(?)  ; 17
+    ; Total Size = 32 (若無 Padding)
 Monster_status ENDS
 
 Bullet STRUCT
@@ -257,7 +259,7 @@ component8 BYTE 20h, 3 DUP(0B0h), 20h, 4 DUP(0B0h), 20h, 5 DUP(20h) ; 轉角4
 towerRangeSq DWORD 400, 1600, 144, 625, 10000
 
 ; 攻擊傷害
-towerDamage  WORD  5, 40, 2, 8, 100
+towerDamage  WORD  5, 40, 2, 8, 333
 
 ; 攻擊冷卻時間 (單位: Frame, 50ms/frame)
 towerReload  BYTE  15, 60, 2, 10, 100

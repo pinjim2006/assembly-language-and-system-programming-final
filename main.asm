@@ -583,15 +583,15 @@ RESTART_GAME:
     ; 清空怪物陣列
     mov ecx, 10                     ; 10隻怪物
     lea edi, roundMonsters
-CLEAR_MONSTERS:
-    mov (Monster_status PTR [edi]).Speed, 0
-    mov (Monster_status PTR [edi]).HP, 0
-    mov (Monster_status PTR [edi]).alrearyDraw, 0
-    mov (Monster_status PTR [edi]).moveCounter, 0
-    add edi, SIZE Monster_status
-    loop CLEAR_MONSTERS
-    
-    ; 清空塔陣列
+    CLEAR_MONSTERS:
+        mov (Monster_status PTR [edi]).Speed, 0
+        mov (Monster_status PTR [edi]).HP, 0
+        mov (Monster_status PTR [edi]).alrearyDraw, 0
+        mov (Monster_status PTR [edi]).moveCounter, 0
+        mov (Monster_status PTR [edi]).originalSpeed, 0
+        mov (Monster_status PTR [edi]).slowTimer, 0
+        add edi, SIZE Monster_status
+    loop CLEAR_MONSTERS    ; 清空塔陣列
     mov ecx, towerMax
     xor eax, eax
     lea edi, towersPosX
@@ -1820,6 +1820,8 @@ END_INPUT_CHECK:
                 mov (Monster_status PTR [edi]).HP, 0
                 mov (Monster_status PTR [edi]).alrearyDraw, 0
                 mov (Monster_status PTR [edi]).moveCounter, 0
+                mov (Monster_status PTR [edi]).originalSpeed, 0
+                mov (Monster_status PTR [edi]).slowTimer, 0
                 add edi, SIZE Monster_status
             loop CLEAR_ESC_MONSTERS
             pop eax

@@ -30,6 +30,7 @@ drawBTower PROTO
 drawCTower PROTO
 drawDTower PROTO
 drawETower PROTO
+updateSlowTimers PROTO
 ; ------------------------------------------------
 ; 常數定義
 ; ------------------------------------------------
@@ -269,6 +270,7 @@ initMonsterData PROC USES eax ebx ecx edx esi edi, monsterID:DWORD, pOut:PTR Mon
     ; [修正] 讀取 Speed (偏移 2)
     mov dl, BYTE PTR [ebx+ecx+2]         
     mov (Monster_status PTR [edi]).Speed, dl
+    mov (Monster_status PTR [edi]).originalSpeed, dl  ; 同時保存原始速度
 
     ; [修正] 讀取 Reward (偏移 3)
     mov dl, BYTE PTR [ebx+ecx+3]         
@@ -290,6 +292,7 @@ initMonsterData PROC USES eax ebx ecx edx esi edi, monsterID:DWORD, pOut:PTR Mon
     ; =========================================================
     mov (Monster_status PTR [edi]).alrearyDraw, 0  
     mov (Monster_status PTR [edi]).moveCounter, 0
+    mov (Monster_status PTR [edi]).slowTimer, 0      ; 初始化減速計時器
 
     ; 讀圖像 
     mov ebx, OFFSET MonstersChars
@@ -356,6 +359,7 @@ storeCounter:
     jmp END_CTRL
     
 callPROC:
+    call updateSlowTimers       ; 更新所有怪物的減速計時器
     call updateMonstersPositions 
     call restoreGraphicsAtMonPos 
     call removeMonsters  
@@ -814,3 +818,43 @@ nextMon:
    
     ret
 removeMonsters ENDP
+
+; =================================================================================
+; 更新所有怪物的減速計時器
+; =================================================================================
+updateSlowTimers PROC USES eax ebx ecx edi
+    
+    xor ebx, ebx    ; monster index
+
+UPDATE_TIMER_LOOP:
+    ; 手動計算 Struct Offset
+    mov eax, SIZE Monster_status
+    mul ebx
+    lea edi, roundMonsters[eax]
+    
+    ; 跳過死亡怪物
+    cmp (Monster_status PTR [edi]).Speed, 0
+    je NEXT_TIMER_UPDATE
+    
+    ; 檢查是否有減速效果
+    cmp (Monster_status PTR [edi]).slowTimer, 0
+    je NEXT_TIMER_UPDATE
+    
+    ; 減少計時器
+    dec (Monster_status PTR [edi]).slowTimer
+    
+    ; 如果計時器歸零，恢復原始速度
+    cmp (Monster_status PTR [edi]).slowTimer, 0
+    jne NEXT_TIMER_UPDATE
+    
+    ; 恢復原始速度
+    mov al, (Monster_status PTR [edi]).originalSpeed
+    mov (Monster_status PTR [edi]).Speed, al
+
+NEXT_TIMER_UPDATE:
+    inc ebx
+    cmp ebx, 10
+    jb UPDATE_TIMER_LOOP
+    
+    ret
+updateSlowTimers ENDP
