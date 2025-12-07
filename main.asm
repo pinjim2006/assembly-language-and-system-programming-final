@@ -575,6 +575,22 @@ RESTART_GAME:
     mov startWave, 0
     mov menuState, 0
     
+    ; 重置怪物系統變數
+    mov timeCounter, 0
+    mov spawnTimer, 15
+    mov monsterCount, 0
+    
+    ; 清空怪物陣列
+    mov ecx, 10                     ; 10隻怪物
+    lea edi, roundMonsters
+CLEAR_MONSTERS:
+    mov (Monster_status PTR [edi]).Speed, 0
+    mov (Monster_status PTR [edi]).HP, 0
+    mov (Monster_status PTR [edi]).alrearyDraw, 0
+    mov (Monster_status PTR [edi]).moveCounter, 0
+    add edi, SIZE Monster_status
+    loop CLEAR_MONSTERS
+    
     ; 清空塔陣列
     mov ecx, towerMax
     xor eax, eax
@@ -1787,6 +1803,28 @@ END_INPUT_CHECK:
             mov towerCount, 0
             mov startWave, 0
             mov menuState, 0
+            
+            ; 重置怪物系統變數
+            mov timeCounter, 0
+            mov spawnTimer, 15
+            mov monsterCount, 0
+            
+            ; 清空怪物陣列
+            push ecx
+            push edi
+            push eax
+            mov ecx, 10                     ; 10隻怪物
+            lea edi, roundMonsters
+            CLEAR_ESC_MONSTERS:
+                mov (Monster_status PTR [edi]).Speed, 0
+                mov (Monster_status PTR [edi]).HP, 0
+                mov (Monster_status PTR [edi]).alrearyDraw, 0
+                mov (Monster_status PTR [edi]).moveCounter, 0
+                add edi, SIZE Monster_status
+            loop CLEAR_ESC_MONSTERS
+            pop eax
+            pop edi
+            pop ecx
             
             ; 清空塔
             push ecx
