@@ -504,6 +504,12 @@ drawETower ENDP
 ; =================================================================================
 ; 戰鬥與子彈系統
 ; =================================================================================
+; =================================================================================
+; 戰鬥與子彈系統 (Mage 範圍攻擊修正版)
+; 修改內容：
+; 1. 新增 targetsHit 區域變數
+; 2. 針對 Type 4 (Mage) 增加多重目標判定
+; =================================================================================
 
 towerCombatSystem PROC USES eax ebx ecx edx esi edi
     LOCAL tIndex:DWORD
@@ -511,6 +517,7 @@ towerCombatSystem PROC USES eax ebx ecx edx esi edi
     LOCAL tX:WORD, tY:WORD, tType:BYTE
     LOCAL range:DWORD, damage:WORD
     LOCAL distSq:DWORD
+    LOCAL targetsHit:DWORD  ; [新增] 紀錄該塔本回合已攻擊的次數
     
     mov tIndex, 0
 
@@ -561,13 +568,16 @@ READY_TO_FIRE:
     mov dx, WORD PTR [esi + eax*2]
     mov damage, dx
 
+    ; [新增] 初始化攻擊計數器
+    mov targetsHit, 0
+
     ; 4. 搜尋目標
     mov mIndex, 0
 MONSTER_LOOP:
     cmp mIndex, 10 
-    jge NEXT_TOWER
+    jge NEXT_TOWER ; 找完所有怪物，換下一座塔
 
-    ; 存取 roundMonsters (24 bytes per struct)
+    ; 存取 roundMonsters (使用 SIZE 自動計算)
     mov eax, SIZE Monster_status
     mul mIndex
     lea edi, roundMonsters[eax]
@@ -576,18 +586,18 @@ MONSTER_LOOP:
     cmp WORD PTR [edi], 0 
     jle NEXT_MONSTER
     
-    ; 檢查已生成 (alrearyDraw == 1)
+    ; 檢查已生成 (alrearyDraw == 1, Offset 12)
     cmp BYTE PTR [edi+12], 1 
     jne NEXT_MONSTER
 
     ; 5. 計算距離
-    movzx eax, WORD PTR [edi+4] ; pos.X
+    movzx eax, WORD PTR [edi+4] ; pos.X (Offset 4)
     movzx ebx, tX
     sub eax, ebx
     imul eax, eax
     mov distSq, eax
     
-    movzx eax, WORD PTR [edi+6] ; pos.Y
+    movzx eax, WORD PTR [edi+6] ; pos.Y (Offset 6)
     movzx ebx, tY
     sub eax, ebx
     imul eax, eax
@@ -597,13 +607,15 @@ MONSTER_LOOP:
     cmp eax, range
     jg NEXT_MONSTER 
 
-    ; 攻擊判定成功
+    ; =================================================
+    ; 攻擊判定成功 - 發射子彈
+    ; =================================================
     push ecx        
     mov ecx, 0      
 
 FIND_EMPTY_BULLET:
     cmp ecx, MAX_BULLETS
-    jge SPAWN_DONE  
+    jge SPAWN_DONE_FAIL ; 找不到空子彈，放棄這次攻擊
 
     mov eax, SIZE Bullet
     mul ecx
@@ -629,7 +641,7 @@ FIND_EMPTY_BULLET:
     mov al, tType
     mov (Bullet PTR [esi]).tType, al
 
-    ; 設定冷卻
+    ; 設定塔的冷卻時間 (只要有發射就重置 CD)
     movzx eax, tType
     dec eax 
     mov esi, OFFSET towerReload
@@ -638,24 +650,45 @@ FIND_EMPTY_BULLET:
     add esi, tIndex
     mov byte ptr [esi], bl
     
-    jmp SPAWN_DONE_AND_BREAK
+    jmp FIRE_SUCCESS
 
 NEXT_BULLET_SLOT:
     inc ecx
     jmp FIND_EMPTY_BULLET
 
-SPAWN_DONE_AND_BREAK:
-    pop ecx
-    jmp NEXT_TOWER 
+FIRE_SUCCESS:
+    pop ecx ; 還原 bullet loop 的 ecx
+    
+    ; =================================================
+    ; [Mage 多重攻擊邏輯]
+    ; =================================================
+    cmp tType, 4            ; 檢查是否為 Mage (Type 4)
+    jne FINISH_TOWER_TURN   ; 不是 Mage -> 射一發就結束 (單體)
 
-SPAWN_DONE:
+    ; 是 Mage -> 增加計數器
+    inc targetsHit
+    cmp targetsHit, 3       ; 檢查是否已攻擊 3 個目標
+    jge FINISH_TOWER_TURN   ; 滿 3 個 -> 結束
+
+    ; 未滿 3 個 -> 繼續搜尋下一個怪物 (多重攻擊)
+    jmp NEXT_MONSTER
+
+FINISH_TOWER_TURN:
+    jmp NEXT_TOWER          ; 結束這座塔的回合
+
+SPAWN_DONE_FAIL:
     pop ecx 
+    ; 找不到子彈空間，若 Mage 還有機會也不要卡死，直接換下一隻怪或下一座塔
+    jmp NEXT_TOWER
+
 NEXT_MONSTER:
     inc mIndex
     jmp MONSTER_LOOP
+
 NEXT_TOWER:
     inc tIndex
     jmp TOWER_LOOP
+
 ALL_TOWERS_DONE:
     ret
 towerCombatSystem ENDP
