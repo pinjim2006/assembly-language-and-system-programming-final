@@ -1222,6 +1222,10 @@ HANDLE_RIGHT:
     jmp END_NORMAL_INPUT
     
 HANDLE_X:
+    ; 檢查是否正在戰鬥中，戰鬥時不允許刪除塔
+    cmp startWave, 1
+    je END_NORMAL_INPUT       ; 如果正在戰鬥，直接跳過刪除邏輯
+    
     call deleteTower          ; 執行拆塔邏輯
     call restoreGraphicsAtPos ; 重繪該格
     
