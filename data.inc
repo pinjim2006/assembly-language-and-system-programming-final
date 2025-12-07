@@ -172,6 +172,8 @@ helpLine4       BYTE "X: Delete tower (get half money back)", 0
 helpLine5       BYTE "G: Start round", 0
 helpLine6       BYTE "ESC: Open menu", 0
 helpLine7       BYTE "Towers can only be placed on empty tiles", 0
+helpLine8		BYTE "If the monster ABYSSION arrives the destination, gamer will lose!", 0
+helpLine9		BYTE "Be careful and good luck :)", 0
 helpPrompt      BYTE "Press any key to continue...", 0
 
 ; 金錢系統提示訊息

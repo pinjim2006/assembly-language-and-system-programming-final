@@ -367,7 +367,17 @@ showHowToPlay PROC USES edx
     call Gotoxy
     mov edx, OFFSET helpLine7
     call WriteString
-    mov dh, 15
+	mov dh, 16
+    mov dl, 20
+    call Gotoxy
+    mov edx, OFFSET helpLine8
+    call WriteString
+	mov dh, 17
+    mov dl, 20
+    call Gotoxy
+    mov edx, OFFSET helpLine9
+    call WriteString
+    mov dh, 19
     mov dl, 22
     call Gotoxy
     mov edx, OFFSET helpPrompt
