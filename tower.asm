@@ -505,19 +505,15 @@ drawETower ENDP
 ; 戰鬥與子彈系統
 ; =================================================================================
 ; =================================================================================
-; 戰鬥與子彈系統 (Mage 範圍攻擊修正版)
-; 修改內容：
-; 1. 新增 targetsHit 區域變數
-; 2. 針對 Type 4 (Mage) 增加多重目標判定
+; 戰鬥與子彈系統 (Mage 多重攻擊修正版)
 ; =================================================================================
-
 towerCombatSystem PROC USES eax ebx ecx edx esi edi
     LOCAL tIndex:DWORD
     LOCAL mIndex:DWORD
     LOCAL tX:WORD, tY:WORD, tType:BYTE
     LOCAL range:DWORD, damage:WORD
     LOCAL distSq:DWORD
-    LOCAL targetsHit:DWORD  ; [新增] 紀錄該塔本回合已攻擊的次數
+    LOCAL targetsHit:DWORD  ; [新增] 用於計算單回合攻擊次數
     
     mov tIndex, 0
 
@@ -568,36 +564,36 @@ READY_TO_FIRE:
     mov dx, WORD PTR [esi + eax*2]
     mov damage, dx
 
-    ; [新增] 初始化攻擊計數器
+    ; [新增] 初始化攻擊計數器 (每座塔開始前歸零)
     mov targetsHit, 0
 
     ; 4. 搜尋目標
     mov mIndex, 0
 MONSTER_LOOP:
     cmp mIndex, 10 
-    jge NEXT_TOWER ; 找完所有怪物，換下一座塔
+    jge NEXT_TOWER  ; 找完所有怪物，這座塔的回合結束
 
-    ; 存取 roundMonsters (使用 SIZE 自動計算)
+    ; 存取 roundMonsters (使用 SIZE 自動計算偏移，避免崩潰)
     mov eax, SIZE Monster_status
     mul mIndex
     lea edi, roundMonsters[eax]
 
     ; 檢查存活 (HP > 0)
-    cmp WORD PTR [edi], 0 
+    cmp (Monster_status PTR [edi]).HP, 0 
     jle NEXT_MONSTER
     
-    ; 檢查已生成 (alrearyDraw == 1, Offset 12)
-    cmp BYTE PTR [edi+12], 1 
+    ; 檢查已生成 (alrearyDraw == 1)
+    cmp (Monster_status PTR [edi]).alrearyDraw, 1 
     jne NEXT_MONSTER
 
     ; 5. 計算距離
-    movzx eax, WORD PTR [edi+4] ; pos.X (Offset 4)
+    movzx eax, (Monster_status PTR [edi]).pos.X
     movzx ebx, tX
     sub eax, ebx
     imul eax, eax
     mov distSq, eax
     
-    movzx eax, WORD PTR [edi+6] ; pos.Y (Offset 6)
+    movzx eax, (Monster_status PTR [edi]).pos.Y
     movzx ebx, tY
     sub eax, ebx
     imul eax, eax
@@ -607,15 +603,15 @@ MONSTER_LOOP:
     cmp eax, range
     jg NEXT_MONSTER 
 
-    ; =================================================
-    ; 攻擊判定成功 - 發射子彈
-    ; =================================================
+    ; =============================================
+    ; 攻擊判定成功 -> 發射子彈
+    ; =============================================
     push ecx        
     mov ecx, 0      
 
 FIND_EMPTY_BULLET:
     cmp ecx, MAX_BULLETS
-    jge SPAWN_DONE_FAIL ; 找不到空子彈，放棄這次攻擊
+    jge SPAWN_DONE_FAIL ; 子彈已滿，跳出
 
     mov eax, SIZE Bullet
     mul ecx
@@ -641,7 +637,7 @@ FIND_EMPTY_BULLET:
     mov al, tType
     mov (Bullet PTR [esi]).tType, al
 
-    ; 設定塔的冷卻時間 (只要有發射就重置 CD)
+    ; 設定冷卻 (只要有開火就重置 CD)
     movzx eax, tType
     dec eax 
     mov esi, OFFSET towerReload
@@ -650,36 +646,35 @@ FIND_EMPTY_BULLET:
     add esi, tIndex
     mov byte ptr [esi], bl
     
-    jmp FIRE_SUCCESS
+    jmp SPAWN_DONE_AND_BREAK
 
 NEXT_BULLET_SLOT:
     inc ecx
     jmp FIND_EMPTY_BULLET
 
-FIRE_SUCCESS:
-    pop ecx ; 還原 bullet loop 的 ecx
+SPAWN_DONE_AND_BREAK:
+    pop ecx
     
     ; =================================================
-    ; [Mage 多重攻擊邏輯]
+    ; [關鍵邏輯] 判斷是否繼續攻擊
     ; =================================================
     cmp tType, 4            ; 檢查是否為 Mage (Type 4)
-    jne FINISH_TOWER_TURN   ; 不是 Mage -> 射一發就結束 (單體)
+    jne STOP_ATTACKING      ; 不是法師 -> 只能打一隻 -> 結束
 
-    ; 是 Mage -> 增加計數器
+    ; 是法師 -> 增加計數
     inc targetsHit
-    cmp targetsHit, 3       ; 檢查是否已攻擊 3 個目標
-    jge FINISH_TOWER_TURN   ; 滿 3 個 -> 結束
+    cmp targetsHit, 3       ; 檢查是否已打滿 3 隻
+    jge STOP_ATTACKING       ; 打滿了 -> 結束
 
-    ; 未滿 3 個 -> 繼續搜尋下一個怪物 (多重攻擊)
+    ; 是法師且未滿 3 隻 -> 繼續找下一個怪物
     jmp NEXT_MONSTER
 
-FINISH_TOWER_TURN:
-    jmp NEXT_TOWER          ; 結束這座塔的回合
+STOP_ATTACKING:
+    jmp NEXT_TOWER 
 
 SPAWN_DONE_FAIL:
     pop ecx 
-    ; 找不到子彈空間，若 Mage 還有機會也不要卡死，直接換下一隻怪或下一座塔
-    jmp NEXT_TOWER
+    jmp NEXT_TOWER ; 子彈滿了也只能結束
 
 NEXT_MONSTER:
     inc mIndex
@@ -692,17 +687,22 @@ NEXT_TOWER:
 ALL_TOWERS_DONE:
     ret
 towerCombatSystem ENDP
-
-
+; =================================================================================
+; 更新所有子彈 (修正版：改用 LOCAL 變數避免 ECX 被 API 汙染)
+; =================================================================================
 updateBullets PROC USES eax ebx ecx edx esi edi
-    mov ecx, 0  
+    LOCAL bIndex:DWORD  ; [新增] 使用區域變數來計數，不要用 ECX
+
+    mov bIndex, 0       ; 初始化索引
 
 BULLET_LOOP:
-    cmp ecx, MAX_BULLETS
+    mov eax, bIndex
+    cmp eax, MAX_BULLETS
     jge BULLET_DONE
 
+    ; 取得子彈指標
     mov eax, SIZE Bullet
-    mul ecx
+    mul bIndex          ; 使用 bIndex 計算偏移
     lea esi, bulletList[eax]    
 
     cmp (Bullet PTR [esi]).active, 0
@@ -725,14 +725,14 @@ SKIP_CLEAR:
     lea edi, roundMonsters[eax] 
 
     ; 檢查目標狀態 (HP=0, Drawn=12)
-    cmp WORD PTR [edi], 0
+    cmp (Monster_status PTR [edi]).HP, 0
     jle DEACTIVATE_BULLET
-    cmp BYTE PTR [edi+12], 1
+    cmp (Monster_status PTR [edi]).alrearyDraw, 1
     jne DEACTIVATE_BULLET
 
     ; 3. 移動子彈
     ; X 軸
-    mov ax, WORD PTR [edi+4] ; pos.X
+    mov ax, (Monster_status PTR [edi]).pos.X ; pos.X
     add ax, 2   
     cmp (Bullet PTR [esi]).pos.X, ax
     jl MOVE_RIGHT
@@ -746,7 +746,7 @@ MOVE_LEFT:
 
 CHECK_Y_AXIS:
     ; Y 軸
-    mov ax, WORD PTR [edi+6] ; pos.Y
+    mov ax, (Monster_status PTR [edi]).pos.Y ; pos.Y
     add ax, 1   
     cmp (Bullet PTR [esi]).pos.Y, ax
     jl MOVE_DOWN
@@ -761,7 +761,7 @@ MOVE_UP:
     ; 4. 命中判定
 CHECK_HIT:
     mov ax, (Bullet PTR [esi]).pos.X
-    sub ax, WORD PTR [edi+4] ; pos.X
+    sub ax, (Monster_status PTR [edi]).pos.X
     cwd             
     xor ax, dx
     sub ax, dx  
@@ -769,7 +769,7 @@ CHECK_HIT:
     jg DRAW_BULLET  
 
     mov ax, (Bullet PTR [esi]).pos.Y
-    sub ax, WORD PTR [edi+6] ; pos.Y
+    sub ax, (Monster_status PTR [edi]).pos.Y
     cwd
     xor ax, dx
     sub ax, dx 
@@ -777,9 +777,9 @@ CHECK_HIT:
     jg DRAW_BULLET  
 
     ; 擊中
-    mov ax, WORD PTR [edi] ; HP
+    mov ax, (Monster_status PTR [edi]).HP
     sub ax, (Bullet PTR [esi]).damage
-    mov WORD PTR [edi], ax
+    mov (Monster_status PTR [edi]).HP, ax
     
     ; 檢查是否為冰塔子彈 (類型3)
     cmp (Bullet PTR [esi]).tType, 3
@@ -789,20 +789,18 @@ CHECK_HIT:
     push eax
     push ebx
     
-    ; 如果怪物還沒被減速過，則觸發減速
     cmp (Monster_status PTR [edi]).slowTimer, 0
     jne ICE_EFFECT_DONE
     
-    ; 保存原始速度並將速度減半
     mov al, (Monster_status PTR [edi]).Speed
     mov (Monster_status PTR [edi]).originalSpeed, al
-    shr al, 1                               ; 速度除以2
-    cmp al, 1                               ; 最低速度為1
+    shr al, 1
+    cmp al, 1
     jge SET_SLOW_SPEED
     mov al, 1
 SET_SLOW_SPEED:
     mov (Monster_status PTR [edi]).Speed, al
-    mov (Monster_status PTR [edi]).slowTimer, 120   ; 減速持續2秒（60fps*2）
+    mov (Monster_status PTR [edi]).slowTimer, 120
     
 ICE_EFFECT_DONE:
     pop ebx
@@ -816,21 +814,34 @@ DRAW_BULLET:
     mov xyPosition.Y, ax
     
     mov al, (Bullet PTR [esi]).tType
+    
+    ; 預設樣式
     mov bulletChar, '*'
     mov bulletAttr, 0ECh  
     
-    cmp al, 3 
+    ; === 特殊子彈樣式判斷 ===
+    cmp al, 3   ; Ice
     jne CHECK_SNIPER
     mov bulletChar, 'o'
-    mov bulletAttr, 0B0h  
+    mov bulletAttr, 0B0h 
     jmp DO_DRAW
+    
 CHECK_SNIPER:
-    cmp al, 2 
-    jne DO_DRAW
+    cmp al, 2   ; Sniper
+    jne CHECK_MAGE
     mov bulletChar, '+'
     mov bulletAttr, 0CFh  
+    jmp DO_DRAW
+
+CHECK_MAGE:     ; [Mage 子彈樣式]
+    cmp al, 4   ; Mage
+    jne DO_DRAW
+    mov bulletChar, 'x'   ; 法師子彈顯示為 x，方便辨識
+    mov bulletAttr, 0DFh  ; 紫色系
+    jmp DO_DRAW
 
 DO_DRAW:
+    ; [注意] 這裡的 INVOKE 會破壞 ECX，所以我們改用 bIndex 來計數
     INVOKE WriteConsoleOutputAttribute, outputHandle, ADDR bulletAttr, 1, xyPosition, ADDR bytesWritten
     INVOKE WriteConsoleOutputCharacter, outputHandle, ADDR bulletChar, 1, xyPosition, ADDR count
     
@@ -847,8 +858,9 @@ DEACTIVATE_BULLET:
     jmp NEXT_BULLET
 
 NEXT_BULLET:
-    inc ecx
-    jmp BULLET_LOOP
+    inc bIndex          ; 增加索引
+    jmp BULLET_LOOP     ; 跳回迴圈開頭
+
 BULLET_DONE:
     ret
 updateBullets ENDP
