@@ -43,11 +43,11 @@ DASH_SPEED          EQU 5    ; 虛線框動畫更新頻率 (數值越大越慢)
 MENU_OPTION_COUNT   EQU 4    ; ESC 選單選項數量
 
 ; --- 塔的價格設定 ---
-TOWER_A_COST        EQU 10   ; Cannon 價格
-TOWER_B_COST        EQU 15   ; Sniper 價格  
-TOWER_C_COST        EQU 20   ; Ice 價格
-TOWER_D_COST        EQU 25   ; Mage 價格
-TOWER_E_COST        EQU 30   ; Missile 價格
+TOWER_A_COST        EQU 8   ; Cannon 價格
+TOWER_B_COST        EQU 12   ; Sniper 價格  
+TOWER_C_COST        EQU 16   ; Ice 價格
+TOWER_D_COST        EQU 20   ; Mage 價格
+TOWER_E_COST        EQU 28   ; Missile 價格
 
 .data
 

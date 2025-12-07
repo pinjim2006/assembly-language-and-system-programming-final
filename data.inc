@@ -90,11 +90,11 @@ attrTowerD      WORD blockWidth DUP(0F0h)
 attrTowerE      WORD blockWidth DUP(0F0h) 
 
 ; --- 塔的名稱字串 (顯示在選單旁) ---
-strNameA        BYTE "Cannon ($10)", 0
-strNameB        BYTE "Sniper ($15)", 0
-strNameC        BYTE "Ice    ($20)", 0  
-strNameD        BYTE "Mage   ($25)", 0
-strNameE        BYTE "Missile($30)", 0 
+strNameA        BYTE "Cannon ($8)", 0
+strNameB        BYTE "Sniper ($12)", 0
+strNameC        BYTE "Ice    ($16)", 0  
+strNameD        BYTE "Mage   ($20)", 0
+strNameE        BYTE "Missile($28)", 0 
 
 ; --- 側邊選單游標樣式 ---
 attrMenuCursor  WORD 4 DUP(0C0h) ; 紅底黑字 (C0h)
@@ -120,7 +120,7 @@ towerCount      DWORD 0               ; 目前已建造的塔數量
 startWave       DWORD 0       
 cur_round       DWORD 1       ; 當前波數 (傳給 monsters.asm 用)
 life            DWORD 10      ; 玩家生命值 (測試用，歸零則遊戲結束)
-money           DWORD 50      ; 玩家金錢 (用於建造塔)
+money           DWORD 10       ; 玩家金錢 (用於建造塔)
 gameOver        DWORD 0       ; 遊戲結束標誌 (0=繼續, 1=結束)
 
 ; menuState: 0 = 游標在地圖上, 1 = 游標在側邊選單 (選塔中)
