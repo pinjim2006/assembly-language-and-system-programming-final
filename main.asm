@@ -568,7 +568,7 @@ RESTART_GAME:
     
     ; 重新開始遊戲，重置所有變數
     mov life, 10
-    mov money, 50
+    mov money, 10
     mov cur_round, 1
     mov gameOver, 0
     mov towerCount, 0
@@ -1781,7 +1781,7 @@ END_INPUT_CHECK:
             call drawSideMenu
         .ELSEIF eax == 2  ; Restart
             mov life, 10
-            mov money, 50
+            mov money, 10
             mov cur_round, 1
             mov gameOver, 0
             mov towerCount, 0
