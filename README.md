@@ -1,7 +1,9 @@
 # 環境
 
-請確保目錄下有以下檔案 (`windbg.zip`中的檔案)
+請確保目錄下有以下檔案 (請將`environment.zip`解壓縮並放入專案根目錄中)
 ```
+|-- constants.inc
+|-- data.inc
 |-- dm.dll
 |-- eecxx.dll
 |-- em.dll
@@ -15,6 +17,7 @@
 |-- Macros.inc
 |-- main.asm
 |-- make.bat
+|-- monsters.asm
 |-- ML.ERR
 |-- ML.EXE
 |-- msdbi.dll
@@ -25,6 +28,7 @@
 |-- shcv.dll
 |-- SmallWin.inc
 |-- tlloc.dll
+|-- tower.asm
 |-- user32.inc
 |-- User32.Lib
 |-- VirtualKeys.inc
@@ -41,7 +45,7 @@
 
 1. 使用上下左右按鍵來操控
 
-2. 使用按鍵`F`來選擇塔
+2. 使用按鍵`f`來選擇塔
 
 3. 使用`enter`來建立塔
 
