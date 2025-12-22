@@ -309,7 +309,9 @@ initMonsterData PROC USES eax ebx ecx edx esi edi, monsterID:DWORD, pOut:PTR Mon
     ret
 initMonsterData ENDP
 
-  
+; ------------------------------------------------
+; 回合進行中核心控制函數
+; ------------------------------------------------   
 ctrlDraw PROC USES eax ebx ecx edx esi edi
     
     ; 1. 更新子彈 (每一幀都執行)
