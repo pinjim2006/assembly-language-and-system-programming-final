@@ -1,3 +1,21 @@
+; -------------------------------------------------------------------------
+; Project: assembly-language-and-system-programming-final
+; Copyright (C) 2026 pinjim2006, peresonacifer, HoshimiyaYuuto
+;
+; This program is free software: you can redistribute it and/or modify
+; it under the terms of the GNU General Public License as published by
+; the Free Software Foundation, either version 3 of the License, or
+; (at your option) any later version.
+;
+; This program is distributed in the hope that it will be useful,
+; but WITHOUT ANY WARRANTY; without even the implied warranty of
+; MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+; GNU General Public License for more details.
+;
+; You should have received a copy of the GNU General Public License
+; along with this program. If not, see <https://www.gnu.org/licenses/>.
+; -------------------------------------------------------------------------
+
 INCLUDE Irvine32.inc
 ; INCLUDE monsters.asm 
 ; 注意：monsters.asm 的引入被移到檔案最末端。
