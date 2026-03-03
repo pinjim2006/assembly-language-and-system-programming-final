@@ -1,5 +1,7 @@
 # 環境
 
+請至 [此 Google Drive 連結](https://drive.google.com/file/d/1WzggzChCYfyONy3Og5orwkIF6wuPC4In/view?usp=drive_link) 下載專案所需的環境壓縮檔。
+
 請確保目錄下有以下檔案 (請將`environment.zip`解壓縮並放入專案根目錄中)
 ```
 |-- constants.inc
@@ -45,15 +47,15 @@
 
 1. 使用上下左右按鍵來操控
 
-2. 使用按鍵`f`來選擇塔
+2. 使用按鍵 `f` 來選擇塔
 
-3. 使用`enter`來建立塔
+3. 使用 `enter` 來建立塔
 
-4. 使用`x`刪除塔
+4. 使用 `x` 刪除塔
 
-5. 使用`g`開始回合
+5. 使用 `g` 開始回合
 
-5. 使用`esc`來開啟選單
+5. 使用 `esc` 來開啟選單
 
 # 遊戲規則
 
